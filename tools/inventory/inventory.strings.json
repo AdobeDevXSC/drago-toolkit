@@ -1,0 +1,67 @@
+{
+  "errors": {
+    "invalidXmlResponse": "Response is not valid XML.",
+    "readFile": "Could not read file.",
+    "invalidSitemapXml": "Could not parse XML (invalid sitemap).",
+    "cancelled": "Cancelled."
+  },
+  "tree": {
+    "repoPathTitle": "Source path under org/repo (matches live pathname when mirrored)",
+    "pendingLinkHint": " Checking DA… link appears if the file exists.",
+    "checking": "Checking…",
+    "inDa": "In DA",
+    "inDaTitle": "Source file exists in this repo",
+    "notInDa": "Not in DA",
+    "notInDaTitle": "No source file at this path (404)",
+    "daError": "DA error",
+    "daErrorTitle": "Unexpected HTTP status or network error",
+    "noHierarchy": "No hierarchical URLs to show.",
+    "unparsedSection": "Unparsed URLs"
+  },
+  "repo": {
+    "openInDa": "Open in Document Authoring",
+    "loadingRoot": "Loading repository…",
+    "rootNotLoaded": "Repository root not loaded.",
+    "loading": "Loading…",
+    "emptyFolder": "Empty folder",
+    "skippedFolder": "Skipped folder with invalid path ({path})."
+  },
+  "copy": {
+    "oneCopied": "Copied 1 URL to clipboard.",
+    "manyCopied": "Copied {n} URLs to clipboard (one per line).",
+    "failedPrefix": "Could not copy:",
+    "urls": "Copy URLs",
+    "oneUrl": "Copy 1 URL",
+    "manyUrls": "Copy {n} URLs",
+    "ariaNone": "Copy URLs to clipboard (choose a sitemap first)",
+    "ariaMany": "Copy {n} URL{sPlural} to clipboard, one per line"
+  },
+  "verify": {
+    "truncated": "DA verification: only the first {maxPaths} unique paths were checked ({skipped} skipped)."
+  },
+  "parse": {
+    "sitemapIndexInfo": "Sitemap index: loading page URLs from nested sitemaps when child URLs are reachable (HTTPS, first 40). If none load, index entries are listed instead.",
+    "nestedFailedInfo": "Nested sitemaps could not be read (network/CORS or local paths). Showing index <loc> entries only.",
+    "noUrlsGeneric": "No URLs found. Check that the file is a valid sitemap.",
+    "noUrlsUsta": "No English (/en/) URLs found. For a sitemap index, nested sitemaps must load over HTTPS, or use a urlset file with page <loc> entries."
+  },
+  "compare": {
+    "pathsFoot": "Showing {shown} of {total} paths.",
+    "panelTitle": "Sitemap ↔ DA repository",
+    "panelSubtitle": "List API crawl",
+    "noteBeforeLink": "Crawls every folder via the ",
+    "listApiLinkText": "List API",
+    "noteAfterLink": ", collects all files in the repo, and compares repo-relative paths to the parsed sitemap (same convention as the URL tree). Large repos may take a minute.",
+    "truncatedStrong": " Last crawl hit the folder safety limit ({maxFolders}); results may be incomplete.",
+    "scanning": "Scanning repository…",
+    "compareButton": "Compare with repository",
+    "needDa": "Open inside Document Authoring to compare against the live repo.",
+    "statBoth": "in both",
+    "statSitemapOnly": "sitemap only",
+    "statRepoOnly": "repo only",
+    "statMeta": "{daFiles} files in DA · {sitemapPaths} unique sitemap paths · {foldersVisited} folders scanned",
+    "colBoth": "In both",
+    "colSitemapOnly": "In sitemap only",
+    "colRepoOnly": "In repo only"
+  }
+}
