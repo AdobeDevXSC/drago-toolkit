@@ -497,6 +497,79 @@ function uniqueSitemapRepoRels(urls) {
 const DA_EDIT_ORIGIN = 'https://da.live';
 
 /**
+ * Reads org/repo from a DA-style hash route `#/org/repo/...` (same shape as {@link daEditHref}).
+ * @param {string} href full document URL, e.g. `window.location.href`
+ * @returns {{ org: string, repo: string } | null}
+ */
+function parseDaOrgRepoFromHref(href) {
+  try {
+    const u = new URL(href);
+    const raw = (u.hash ?? '').replace(/^#\/?/, '').replace(/\/+$/, '');
+    const parts = raw.split('/').filter(Boolean);
+    if (parts.length < 2) return null;
+    const org = parts[0].trim();
+    const repo = parts[1].trim();
+    if (!org || !repo) return null;
+    return { org, repo };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * `?org=` and `?repo=` on the page URL (explicit override for embedded tools).
+ * @param {string} href full document URL
+ * @returns {{ org: string, repo: string } | null}
+ */
+function parseDaOrgRepoFromHrefSearchParams(href) {
+  try {
+    const u = new URL(href);
+    const org = (u.searchParams.get('org') ?? '').trim();
+    const repo = (u.searchParams.get('repo') ?? '').trim();
+    if (!org || !repo) return null;
+    return { org, repo };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Resolves org/repo from embedded windows (self, parent, top).
+ * Precedence: {@link parseDaOrgRepoFromHrefSearchParams} on each URL first, then {@link parseDaOrgRepoFromHref} (hash `#/org/repo/...`).
+ * Embedded blocks often run in an iframe whose URL has no hash while the DA editor hash is on a parent frame.
+ * @returns {{ org: string, repo: string } | null}
+ */
+function parseDaOrgRepoFromEmbeddedBrowsers() {
+  /** @type {string[]} */
+  const hrefs = [];
+  /**
+   * @param {Location | undefined} loc
+   */
+  const tryPush = (loc) => {
+    try {
+      const h = loc?.href;
+      if (typeof h === 'string' && h && !hrefs.includes(h)) hrefs.push(h);
+    } catch {
+      /* cross-origin frame: reading .href throws */
+    }
+  };
+
+  tryPush(globalThis.location);
+  if (globalThis.parent !== globalThis) tryPush(globalThis.parent.location);
+  if (globalThis.top !== globalThis) tryPush(globalThis.top.location);
+
+  for (const href of hrefs) {
+    const q = parseDaOrgRepoFromHrefSearchParams(href);
+    if (q) return q;
+  }
+  for (const href of hrefs) {
+    const p = parseDaOrgRepoFromHref(href);
+    if (p) return p;
+  }
+  return null;
+}
+
+/**
  * @param {string} org
  * @param {string} repo
  * @param {string} repoPath pathname-style path, e.g. `/en/home/home.html`
@@ -782,12 +855,12 @@ class EmaInventory extends LitElement {
      * @type {{ kind: 'generic', path: ReturnType<typeof analyzeSitemapUrls> } | { kind: 'usta', path: ReturnType<typeof analyzeSitemapUrls>, usta: { total: number, typeCount: number, types: { type: string, count: number, percentage: number, example: string }[] }, recent: { url: string, lastmod: string }[] } | null}
      */
     sitemapAnalysis: { type: Object, state: true },
-    /** Section bucket key (`urlSiteSection(...).display`) when scoping inventory to a section */
+    /** Section bucket key (`urlSiteSection(...).display`) when scoping inventory to a section (clears picked URLs) */
     selectedSectionDisplay: { type: String, state: true },
-    /** USTA: `classifyURL()` label when scoping by page type (mutually exclusive with section / single URL) */
+    /** USTA: `classifyURL()` label when scoping by page type (mutually exclusive with section / picked URLs) */
     selectedPageType: { type: String, state: true },
-    /** Exact sitemap URL when scoping to one page (mutually exclusive with section) */
-    selectedSingleUrl: { type: String, state: true },
+    /** Sitemap URLs chosen in the pick list (subset scope; mutually exclusive with section / page type) */
+    selectedUrls: { type: Array, state: true },
     /** Filter substring for URL picker list */
     urlPickFilter: { type: String, state: true },
     /** Ephemeral message after copy-to-clipboard */
@@ -818,7 +891,7 @@ class EmaInventory extends LitElement {
     this.sitemapAnalysis = null;
     this.selectedSectionDisplay = '';
     this.selectedPageType = '';
-    this.selectedSingleUrl = '';
+    this.selectedUrls = [];
     this.urlPickFilter = '';
     this.copyFeedback = '';
     /** @type {ReturnType<typeof setTimeout> | undefined} */
@@ -855,8 +928,9 @@ class EmaInventory extends LitElement {
   get _effectiveInventoryUrls() {
     const all = this.urls;
     if (!all.length) return [];
-    if (this.selectedSingleUrl) {
-      return all.includes(this.selectedSingleUrl) ? [this.selectedSingleUrl] : [];
+    if (this.selectedUrls?.length) {
+      const sel = new Set(this.selectedUrls);
+      return all.filter((u) => sel.has(u));
     }
     if (this.selectedPageType) {
       return all.filter((u) => classifyURL(u) === this.selectedPageType);
@@ -874,6 +948,24 @@ class EmaInventory extends LitElement {
     return base.filter((u) => u.toLowerCase().includes(q)).slice(0, URL_PICK_LIST_CAP);
   }
 
+  /** Every sitemap URL matching the current filter (same rule as {@link _urlPickMatchCount}; not list-capped). */
+  get _urlPickFilteredAll() {
+    const q = (this.urlPickFilter || '').trim().toLowerCase();
+    const base = this.urls;
+    if (!base.length) return [];
+    if (!q) return [...base];
+    return base.filter((u) => u.toLowerCase().includes(q));
+  }
+
+  _selectAllFilteredUrls() {
+    const matched = this._urlPickFilteredAll;
+    if (!matched.length) return;
+    this.selectedUrls = matched;
+    this.selectedSectionDisplay = '';
+    this.selectedPageType = '';
+    this._refreshDaVerificationAfterScopeChange();
+  }
+
   _refreshDaVerificationAfterScopeChange() {
     this._clearCompareAnalysis();
     this._startDaVerification();
@@ -887,7 +979,7 @@ class EmaInventory extends LitElement {
       this.selectedSectionDisplay = '';
     } else {
       this.selectedSectionDisplay = display;
-      this.selectedSingleUrl = '';
+      this.selectedUrls = [];
       this.selectedPageType = '';
     }
     this._refreshDaVerificationAfterScopeChange();
@@ -902,7 +994,7 @@ class EmaInventory extends LitElement {
     } else {
       this.selectedPageType = type;
       this.selectedSectionDisplay = '';
-      this.selectedSingleUrl = '';
+      this.selectedUrls = [];
     }
     this._refreshDaVerificationAfterScopeChange();
   }
@@ -910,11 +1002,12 @@ class EmaInventory extends LitElement {
   /**
    * @param {string} url
    */
-  _toggleSingleUrlSelection(url) {
-    if (this.selectedSingleUrl === url) {
-      this.selectedSingleUrl = '';
-    } else {
-      this.selectedSingleUrl = url;
+  _togglePickedUrlSelection(url) {
+    const cur = this.selectedUrls ?? [];
+    const has = cur.includes(url);
+    const next = has ? cur.filter((u) => u !== url) : [...cur, url];
+    this.selectedUrls = next;
+    if (next.length) {
       this.selectedSectionDisplay = '';
       this.selectedPageType = '';
     }
@@ -922,10 +1015,10 @@ class EmaInventory extends LitElement {
   }
 
   _clearScopeSelection() {
-    if (!this.selectedSectionDisplay && !this.selectedSingleUrl && !this.selectedPageType) return;
+    if (!this.selectedSectionDisplay && !this.selectedUrls?.length && !this.selectedPageType) return;
     this.selectedSectionDisplay = '';
     this.selectedPageType = '';
-    this.selectedSingleUrl = '';
+    this.selectedUrls = [];
     this.urlPickFilter = '';
     this._refreshDaVerificationAfterScopeChange();
   }
@@ -937,7 +1030,7 @@ class EmaInventory extends LitElement {
     }, ms);
   }
 
-  /** Copies scoped URLs (full sitemap, one section, or one URL) as plain text, one URL per line. */
+  /** Copies scoped URLs (full sitemap, one section, page type, or picked URLs) as plain text, one URL per line. */
   async _copyEffectiveUrlsToClipboard() {
     const urls = this._effectiveInventoryUrls;
     if (!urls.length || this.loading) return;
@@ -1204,7 +1297,7 @@ class EmaInventory extends LitElement {
     this.sitemapAnalysis = null;
     this.selectedSectionDisplay = '';
     this.selectedPageType = '';
-    this.selectedSingleUrl = '';
+    this.selectedUrls = [];
     this.urlPickFilter = '';
     this.copyFeedback = '';
     clearTimeout(this._copyFeedbackTimer);
@@ -1481,13 +1574,13 @@ class EmaInventory extends LitElement {
         this.sitemapAnalysis = null;
         this.selectedSectionDisplay = '';
         this.selectedPageType = '';
-        this.selectedSingleUrl = '';
+        this.selectedUrls = [];
         this.urlPickFilter = '';
         this.info = isUsta ? STR.parse.noUrlsUsta : STR.parse.noUrlsGeneric;
       } else {
         this.selectedSectionDisplay = '';
         this.selectedPageType = '';
-        this.selectedSingleUrl = '';
+        this.selectedUrls = [];
         this.urlPickFilter = '';
         const pathBuckets = analyzeSitemapUrls(this.urls);
         if (isUsta) {
@@ -1514,7 +1607,7 @@ class EmaInventory extends LitElement {
       this.sitemapAnalysis = null;
       this.selectedSectionDisplay = '';
       this.selectedPageType = '';
-      this.selectedSingleUrl = '';
+      this.selectedUrls = [];
       this.urlPickFilter = '';
       this.daExistence = {};
     } finally {
@@ -1674,7 +1767,7 @@ class EmaInventory extends LitElement {
           <ul class="ema-inv-dash__sections-list">
             ${preview.map((row) => {
               const selected =
-                this.selectedSectionDisplay === row.display && !this.selectedSingleUrl;
+                this.selectedSectionDisplay === row.display && !this.selectedUrls?.length;
               return html`
                 <li>
                   <button
@@ -1759,7 +1852,7 @@ class EmaInventory extends LitElement {
           <ul class="ema-inv-dash__sections-list">
             ${preview.map((row) => {
               const selected =
-                this.selectedPageType === row.type && !this.selectedSingleUrl;
+                this.selectedPageType === row.type && !this.selectedUrls?.length;
               return html`
                 <li>
                   <button
@@ -1839,12 +1932,13 @@ class EmaInventory extends LitElement {
     return html`
       <div class="ema-inv__panel ema-inv__panel--analysis">
         <div class="ema-inv__panel-head">
-          <span>Pick a URL</span>
-          <span>filter · click to scope one page</span>
+          <span>Pick URLs</span>
+          <span>filter · click to add or remove from scope</span>
         </div>
         <p class="ema-inv__panel-note ema-inv__panel-note--flush">
-          Type to narrow the list. Click a URL to scope inventory to that page only; click again on the selected URL to
-          clear.
+          Type to narrow the list. Click a URL to include it in the scoped set; click again to remove.
+          <strong>Select all matching</strong> adds every URL that matches the filter (including matches not shown in the
+          list when it is truncated). Choosing a section or page type clears the URL pick.
         </p>
         <div class="ema-inv__field ema-inv__field--compact">
           <label class="ema-inv__label" for="ema-inv-url-filter">Filter URLs</label>
@@ -1861,6 +1955,19 @@ class EmaInventory extends LitElement {
             }}
           />
         </div>
+        <div class="ema-inv__url-pick-actions">
+          <button
+            type="button"
+            class="ema-inv__btn ema-inv__btn--compact"
+            ?disabled=${!matchCount || this.loading}
+            aria-label=${matchCount
+              ? `Select all ${matchCount.toLocaleString()} URL${matchCount === 1 ? '' : 's'} matching the current filter`
+              : 'Select all matching (no URLs match the filter)'}
+            @click=${() => this._selectAllFilteredUrls()}
+          >
+            Select all matching${matchCount ? ` (${matchCount.toLocaleString()})` : ''}
+          </button>
+        </div>
         ${listTruncated
           ? html`<p class="ema-inv__analysis-foot">
               Showing first ${URL_PICK_LIST_CAP} of ${matchCount} match${matchCount === 1 ? '' : 'es'} — refine the filter
@@ -1873,9 +1980,9 @@ class EmaInventory extends LitElement {
               <li>
                 <button
                   type="button"
-                  class="ema-inv__url-pick-item ${this.selectedSingleUrl === u ? 'ema-inv__url-pick-item--selected' : ''}"
-                  aria-pressed=${this.selectedSingleUrl === u ? 'true' : 'false'}
-                  @click=${() => this._toggleSingleUrlSelection(u)}
+                  class="ema-inv__url-pick-item ${this.selectedUrls?.includes(u) ? 'ema-inv__url-pick-item--selected' : ''}"
+                  aria-pressed=${this.selectedUrls?.includes(u) ? 'true' : 'false'}
+                  @click=${() => this._togglePickedUrlSelection(u)}
                 >
                   ${u}
                 </button>
@@ -1899,7 +2006,7 @@ class EmaInventory extends LitElement {
 
     if (bundle.kind === 'usta' && bundle.usta) {
       const scopeActive = Boolean(
-        this.selectedPageType || this.selectedSectionDisplay || this.selectedSingleUrl,
+        this.selectedPageType || this.selectedSectionDisplay || this.selectedUrls?.length,
       );
       const usta = bundle.usta;
       const types = usta.types ?? [];
@@ -1912,7 +2019,7 @@ class EmaInventory extends LitElement {
           <div class="ema-inv__analysis-scope-intro">
             <span class="ema-inv__analysis-scope-intro-text">
               Scope using the dashboard <strong>page types</strong>, the full <strong>page types</strong> table, or
-              <strong>one URL</strong> from the pick list. <strong>Copy URLs</strong> copies that set; scope also drives the
+              <strong>one or more URLs</strong> from the pick list. <strong>Copy URLs</strong> copies that set; scope also drives the
               Sitemap inventory tab and DA / repo checks.
               ${scopeActive
                 ? html`
@@ -1992,7 +2099,7 @@ class EmaInventory extends LitElement {
     const p = bundle.path;
     if (!p) return nothing;
 
-    const scopeActive = Boolean(this.selectedSectionDisplay || this.selectedSingleUrl);
+    const scopeActive = Boolean(this.selectedSectionDisplay || this.selectedUrls?.length);
 
     return html`
       <div class="ema-inv__analysis">
@@ -2001,7 +2108,7 @@ class EmaInventory extends LitElement {
         <div class="ema-inv__analysis-scope-intro">
           <span class="ema-inv__analysis-scope-intro-text">
             Scope using the dashboard <strong>sections</strong> list, the full <strong>sections</strong> table, or
-            <strong>one URL</strong> from the pick list. <strong>Copy URLs</strong> copies that set; scope also drives the
+            <strong>one or more URLs</strong> from the pick list. <strong>Copy URLs</strong> copies that set; scope also drives the
             Sitemap inventory tab and DA / repo checks.
             ${scopeActive
               ? html`
@@ -2337,8 +2444,8 @@ class EmaInventory extends LitElement {
                 ?hidden=${this.activeTab !== 'sitemap'}
               >
                 <p class="ema-inv__lead ema-inv__lead--tab">
-                  URLs are grouped in a <strong>tree view</strong> by hostname and path segments. Scope (section or single
-                  URL) is chosen on the <strong>Upload sitemap</strong> tab. For each page, the <strong>repo path</strong>
+                  URLs are grouped in a <strong>tree view</strong> by hostname and path segments. Scope (section, page type,
+                  or picked URLs) is chosen on the <strong>Upload sitemap</strong> tab. For each page, the <strong>repo path</strong>
                   is the URL pathname (for example <code>/en/home/home.html</code>) — the same path under org/repo when the
                   site mirrors the repo. When this tool runs inside <strong>Document Authoring</strong>, each path is
                   checked with the Source API (<strong>In DA</strong> vs <strong>Not in DA</strong> for 404); the repo path
@@ -2353,9 +2460,9 @@ class EmaInventory extends LitElement {
                   <div class="ema-inv__panel-head ema-inv__panel-head--wrap">
                     <span class="ema-inv__panel-head-title">URL tree + repo path + DA</span>
                     <span class="ema-inv__panel-head-meta">
-                      ${this._effectiveInventoryUrls.length} in scope${this.selectedSectionDisplay ||
+                      ${this._effectiveInventoryUrls.length} in scope                      ${this.selectedSectionDisplay ||
                       this.selectedPageType ||
-                      this.selectedSingleUrl
+                      this.selectedUrls?.length
                         ? html` · ${this.urls.length} in sitemap`
                         : nothing}
                     </span>
@@ -2426,7 +2533,13 @@ export default async function init(el) {
   const cmp = document.createElement(EL_NAME);
   cmp.details = typeof getBlockDetails === 'function' ? getBlockDetails(el) : {};
   cmp.daFetch = daFetch;
-  cmp.context = context;
+  const base = context ? { ...context } : {};
+  const urlOrgRepo = parseDaOrgRepoFromEmbeddedBrowsers();
+  if (urlOrgRepo) {
+    base.org = urlOrgRepo.org;
+    base.repo = urlOrgRepo.repo;
+  }
+  cmp.context = Object.keys(base).length ? base : null;
   cmp.adminOrigin = adminOrigin;
   el.replaceChildren();
   el.append(cmp);
