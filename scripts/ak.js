@@ -257,6 +257,14 @@ function decorateSections(parent, isDoc) {
   });
 }
 
+function decorateLayout() {
+  const layout = getMetadata('nav-layout');
+  if (layout === 'top') return;
+  document.body.classList.add('layout-side-nav');
+  const main = document.querySelector('main');
+  if (main) main.classList.add('site-content');
+}
+
 function decorateHeader() {
   const header = document.querySelector('header');
   if (!header) return;
@@ -272,7 +280,12 @@ function decorateHeader() {
   const breadcrumbsPath = getMetadata('breadcrumbs');
   if (!(breadcrumbs || breadcrumbsPath)) return;
   document.body.classList.add('has-breadcrumbs');
-  if (breadcrumbs) header.append(breadcrumbs);
+  if (breadcrumbs) {
+    const target = document.body.classList.contains('layout-side-nav')
+      ? document.querySelector('main')
+      : header;
+    target?.append(breadcrumbs);
+  }
 }
 
 function decorateSession() {
@@ -281,6 +294,7 @@ function decorateSession() {
 }
 
 function decorateDoc() {
+  decorateLayout();
   decorateHeader();
   loadTemplate();
 

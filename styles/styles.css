@@ -205,6 +205,14 @@ html {
   scroll-padding-top: calc(var(--header-height) + 1rem);
 }
 
+body.layout-side-nav {
+  scroll-padding-top: 1rem;
+}
+
+html:has(body.layout-side-nav) {
+  scroll-padding-top: 1rem;
+}
+
 body {
   margin: 0;
   background-color: var(--color-background);
@@ -298,9 +306,10 @@ a {
 .section {
   display: block;
 
-  > .default-content {
+  > .default-content,
+  > .block-content {
     max-width: var(--grid-container-width);
-    margin: 0 auto;
+    margin-inline: auto;
   }
 }
 

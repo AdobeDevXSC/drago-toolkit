@@ -11,6 +11,10 @@ const HEADER_ACTIONS = [
   '/tools/widgets/toggle',
 ];
 
+function isSideNavLayout() {
+  return document.body.classList.contains('layout-side-nav');
+}
+
 function closeAllMenus() {
   const openMenus = document.body.querySelectorAll('header .is-open');
   for (const openMenu of openMenus) {
@@ -18,9 +22,17 @@ function closeAllMenus() {
   }
 }
 
+function closeSidenavDrawer() {
+  document.body.classList.remove('sidenav-open');
+  document.body.querySelector('header')?.classList.remove('is-mobile-open');
+}
+
 function docClose(e) {
   if (e.target.closest('header')) return;
   closeAllMenus();
+  if (isSideNavLayout() && window.matchMedia('(width < 900px)').matches) {
+    closeSidenavDrawer();
+  }
 }
 
 function toggleMenu(menu) {
@@ -31,7 +43,6 @@ function toggleMenu(menu) {
     return;
   }
 
-  // Setup the global close event
   document.addEventListener('click', docClose);
   menu.classList.add('is-open');
 }
@@ -71,7 +82,6 @@ function decorateScheme(btn) {
     body.classList.remove(theme.remove);
     body.classList.add(theme.add);
     localStorage.setItem('color-scheme', theme.add);
-    // Re-calculatie section schemes
     const sections = document.querySelectorAll('.section');
     for (const section of sections) {
       setColorScheme(section);
@@ -82,7 +92,44 @@ function decorateScheme(btn) {
 function decorateNavToggle(btn) {
   btn.addEventListener('click', () => {
     const header = document.body.querySelector('header');
-    if (header) header.classList.toggle('is-mobile-open');
+    if (!header) return;
+    const open = header.classList.toggle('is-mobile-open');
+    document.body.classList.toggle('sidenav-open', open);
+  });
+}
+
+function ensureSidenavScrim() {
+  if (document.querySelector('.sidenav-scrim')) return;
+  const scrim = document.createElement('button');
+  scrim.type = 'button';
+  scrim.className = 'sidenav-scrim';
+  scrim.setAttribute('aria-label', 'Close navigation');
+  scrim.addEventListener('click', closeSidenavDrawer);
+  document.body.append(scrim);
+}
+
+function bindSidenavEscape() {
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape' || !document.body.classList.contains('sidenav-open')) return;
+    closeSidenavDrawer();
+    closeAllMenus();
+  });
+}
+
+function setActiveNavLink(root) {
+  const { pathname } = window.location;
+  root.querySelectorAll('a[href]').forEach((anchor) => {
+    try {
+      const href = anchor.getAttribute('href');
+      if (!href || href.startsWith('#')) return;
+      const url = new URL(anchor.href, window.location.origin);
+      if (url.pathname === pathname) {
+        anchor.setAttribute('aria-current', 'page');
+        anchor.closest('.main-nav-item')?.classList.add('is-current');
+      }
+    } catch {
+      /* ignore malformed href */
+    }
   });
 }
 
@@ -101,7 +148,8 @@ async function decorateAction(header, pattern) {
     btn.append(textSpan);
   }
   const wrapper = document.createElement('div');
-  wrapper.className = `action-wrapper ${icon.classList[1].replace('icon-', '')}`;
+  const iconClass = icon?.classList?.[1]?.replace('icon-', '') || 'action';
+  wrapper.className = `action-wrapper ${iconClass}`;
   wrapper.append(btn);
   link.parentElement.parentElement.replaceChild(wrapper, link.parentElement);
 
@@ -111,7 +159,6 @@ async function decorateAction(header, pattern) {
 }
 
 function decorateMenu() {
-  // TODO: finish single menu support
   return null;
 }
 
@@ -130,16 +177,25 @@ function decorateNavItem(li) {
   const link = li.querySelector(':scope > p > a');
   if (link) link.classList.add('main-nav-link');
   const menu = decorateMegaMenu(li) || decorateMenu(li);
-  if (!(menu || link)) return;
-  link.addEventListener('click', (e) => {
-    e.preventDefault();
-    toggleMenu(li);
-  });
+  if (!link && !menu) return;
+  if (menu && link) {
+    link.addEventListener('click', (e) => {
+      e.preventDefault();
+      if (isSideNavLayout()) {
+        const open = li.classList.toggle('is-open');
+        link.setAttribute('aria-expanded', open ? 'true' : 'false');
+      } else {
+        toggleMenu(li);
+      }
+    });
+    if (isSideNavLayout()) link.setAttribute('aria-expanded', 'false');
+  }
 }
 
 function decorateBrandSection(section) {
   section.classList.add('brand-section');
   const brandLink = section.querySelector('a');
+  if (!brandLink) return;
   const [, text] = brandLink.childNodes;
   const span = document.createElement('span');
   span.className = 'brand-text';
@@ -155,6 +211,7 @@ function decorateNavSection(section) {
   navList.classList.add('main-nav-list');
 
   const nav = document.createElement('nav');
+  nav.setAttribute('aria-label', 'Primary');
   nav.append(navList);
   navContent.append(nav);
 
@@ -162,6 +219,11 @@ function decorateNavSection(section) {
   for (const navItem of mainNavItems) {
     decorateNavItem(navItem);
   }
+  if (isSideNavLayout()) setActiveNavLink(nav);
+}
+
+function decorateSecondarySection(section) {
+  section.classList.add('sidenav-secondary');
 }
 
 async function decorateActionSection(section) {
@@ -173,6 +235,7 @@ async function decorateHeader(fragment) {
   if (sections[0]) decorateBrandSection(sections[0]);
   if (sections[1]) decorateNavSection(sections[1]);
   if (sections[2]) decorateActionSection(sections[2]);
+  if (sections[3]) decorateSecondarySection(sections[3]);
 
   for (const pattern of HEADER_ACTIONS) {
     decorateAction(fragment, pattern);
@@ -187,8 +250,13 @@ export default async function init(el) {
   const headerMeta = getMetadata('header');
   const path = headerMeta || HEADER_PATH;
   try {
+    if (isSideNavLayout()) {
+      el.classList.add('site-sidenav');
+      ensureSidenavScrim();
+      bindSidenavEscape();
+    }
     const fragment = await loadFragment(`${locale.prefix}${path}`);
-    fragment.classList.add('header-content');
+    fragment.classList.add('header-content', 'sidenav-inner');
     await decorateHeader(fragment);
     el.append(fragment);
   } catch (e) {
