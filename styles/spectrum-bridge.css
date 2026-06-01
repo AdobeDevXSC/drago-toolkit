@@ -1,0 +1,21 @@
+/**
+ * Maps legacy author-kit custom properties to Spectrum 2 tokens.
+ * Requires /deps/spectrum/dist/tokens.css and a page-level <sp-theme>.
+ */
+:root {
+  --font-family: var(--spectrum-sans-font-family-stack);
+  --color-background: var(--spectrum-background-layer-1-color);
+  --color-text: var(--spectrum-gray-800);
+  --color-link: var(--spectrum-gray-900);
+  --color-accent: var(--spectrum-accent-background-color-default);
+  --color-brand: var(--spectrum-accent-background-color-default);
+  --color-gray-100: var(--spectrum-gray-100);
+  --color-gray-200: var(--spectrum-gray-200);
+  --color-gray-300: var(--spectrum-gray-300);
+  --color-gray-400: var(--spectrum-gray-400);
+  --color-gray-500: var(--spectrum-gray-500);
+  --color-gray-600: var(--spectrum-gray-600);
+  --color-gray-700: var(--spectrum-gray-700);
+  --color-gray-800: var(--spectrum-gray-800);
+  --color-gray-900: var(--spectrum-gray-900);
+}

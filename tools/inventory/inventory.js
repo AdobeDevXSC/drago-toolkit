@@ -1931,14 +1931,26 @@ class EmaInventory extends LitElement {
   _renderUrlPickPanel(listTruncated, matchCount) {
     return html`
       <div class="ema-inv__panel ema-inv__panel--analysis">
-        <div class="ema-inv__panel-head">
-          <span>Pick URLs</span>
-          <span>filter · click to add or remove from scope</span>
+        <div class="ema-inv__panel-head ema-inv__panel-head--wrap ema-inv__panel-head--url-pick">
+          <div class="ema-inv__url-pick-head-text">
+            <span>Pick URLs</span>
+            <span class="ema-inv__panel-head-meta">Filter · click to add or remove · use button for every match</span>
+          </div>
+          <button
+            type="button"
+            class="ema-inv__btn ema-inv__btn--compact ema-inv__btn--primary ema-inv__url-pick-select-all"
+            ?disabled=${!matchCount || this.loading}
+            aria-label=${matchCount
+              ? `Select all ${matchCount.toLocaleString()} URL${matchCount === 1 ? '' : 's'} matching the current filter`
+              : 'Select all matching (no URLs match the filter)'}
+            @click=${() => this._selectAllFilteredUrls()}
+          >
+            Select all matching${matchCount ? ` (${matchCount.toLocaleString()})` : ''}
+          </button>
         </div>
         <p class="ema-inv__panel-note ema-inv__panel-note--flush">
-          Type to narrow the list. Click a URL to include it in the scoped set; click again to remove.
-          <strong>Select all matching</strong> adds every URL that matches the filter (including matches not shown in the
-          list when it is truncated). Choosing a section or page type clears the URL pick.
+          Type to narrow the list. <strong>Select all matching</strong> scopes every URL that fits the filter (including
+          matches not listed below when the list is truncated). Choosing a section or page type clears the URL pick.
         </p>
         <div class="ema-inv__field ema-inv__field--compact">
           <label class="ema-inv__label" for="ema-inv-url-filter">Filter URLs</label>
@@ -1954,19 +1966,6 @@ class EmaInventory extends LitElement {
               if (el instanceof HTMLInputElement) this.urlPickFilter = el.value;
             }}
           />
-        </div>
-        <div class="ema-inv__url-pick-actions">
-          <button
-            type="button"
-            class="ema-inv__btn ema-inv__btn--compact"
-            ?disabled=${!matchCount || this.loading}
-            aria-label=${matchCount
-              ? `Select all ${matchCount.toLocaleString()} URL${matchCount === 1 ? '' : 's'} matching the current filter`
-              : 'Select all matching (no URLs match the filter)'}
-            @click=${() => this._selectAllFilteredUrls()}
-          >
-            Select all matching${matchCount ? ` (${matchCount.toLocaleString()})` : ''}
-          </button>
         </div>
         ${listTruncated
           ? html`<p class="ema-inv__analysis-foot">

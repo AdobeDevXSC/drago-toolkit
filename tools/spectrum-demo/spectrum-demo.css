@@ -1,0 +1,36 @@
+/**
+ * Layout for the Spectrum 2 Phase 1 demo (tokens drive color/type inside sp-theme).
+ */
+body {
+  margin: 0;
+}
+
+.spectrum-demo {
+  box-sizing: border-box;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 32px 24px 48px;
+  font-family: var(--spectrum-sans-font-family-stack);
+  background: var(--spectrum-background-layer-1-color);
+  color: var(--spectrum-gray-800);
+}
+
+.spectrum-demo__title {
+  margin: 0 0 8px;
+}
+
+.spectrum-demo__lead {
+  margin: 0 0 24px;
+  color: var(--spectrum-gray-700);
+}
+
+.spectrum-demo__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+.spectrum-demo__actions sp-button {
+  flex-shrink: 0;
+}

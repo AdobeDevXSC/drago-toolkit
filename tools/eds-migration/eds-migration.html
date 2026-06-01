@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>EDS migration workbench</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" href="data:," />
+    <!--
+      Dev setup:
+      1. export CURSOR_API_KEY=...
+      2. npm run eds-migration:api   (http://localhost:8791)
+      3. aem up → /tools/eds-migration/eds-migration.html
+      Optional: ?api=http://localhost:8791 or window.__EDS_MIGRATION_API__
+    -->
+    <link rel="stylesheet" href="/deps/spectrum/dist/tokens.css" />
+    <link rel="stylesheet" href="/tools/eds-migration/eds-migration.css" />
+    <script src="/tools/eds-migration/eds-migration.js" type="module"></script>
+  </head>
+  <body>
+    <div id="eds-migration-root"></div>
+  </body>
+</html>

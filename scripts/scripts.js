@@ -1,4 +1,5 @@
 import { loadArea, setConfig } from './ak.js';
+import { applyDocumentSpectrumTheme, initSpectrum } from './utils/spectrum-theme.js';
 
 const hostnames = ['authorkit.dev'];
 
@@ -34,6 +35,8 @@ const decorateArea = ({ area = document }) => {
 };
 
 export async function loadPage() {
+  initSpectrum();
+  applyDocumentSpectrumTheme();
   setConfig({ hostnames, locales, linkBlocks, components, decorateArea });
   await loadArea();
 }
