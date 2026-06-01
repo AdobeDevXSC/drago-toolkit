@@ -8,7 +8,8 @@
       "field": "fullName",
       "label": "Full name",
       "required": "true",
-      "placeholder": "Enter your full name"
+      "placeholder": "Enter your full name",
+      "section": "Contact details"
     },
     {
       "type": "email",
@@ -16,14 +17,16 @@
       "label": "Email address",
       "required": "true",
       "placeholder": "you@example.com",
-      "help": "We will only use this to respond to your enquiry."
+      "help": "We will only use this to respond to your enquiry.",
+      "section": "Contact details"
     },
     {
       "type": "tel",
       "field": "phone",
       "label": "Phone number",
       "placeholder": "+1 555 0100",
-      "help": "Optional. Include country code if outside the US."
+      "help": "Optional. Include country code if outside the US.",
+      "section": "Contact details"
     },
     {
       "type": "select",
@@ -31,7 +34,8 @@
       "label": "Topic",
       "required": "true",
       "placeholder": "Please select",
-      "options": "General enquiry,Partnership,Support"
+      "options": "General enquiry,Partnership,Support",
+      "section": "Your enquiry"
     },
     {
       "type": "radio",
@@ -39,33 +43,38 @@
       "label": "Preferred contact method",
       "required": "true",
       "default": "Email",
-      "options": "Phone,Email"
+      "options": "Phone,Email",
+      "section": "Your enquiry"
     },
     {
       "type": "text",
       "field": "phoneDetail",
       "label": "Best number to reach you",
       "help": "Shown when Phone is selected.",
-      "conditional": "contactMethod-phone"
+      "conditional": "contactMethod-phone",
+      "section": "Your enquiry"
     },
     {
       "type": "textarea",
       "field": "message",
       "label": "Message",
       "required": "true",
-      "placeholder": "How can we help?"
+      "placeholder": "How can we help?",
+      "section": "Your enquiry"
     },
     {
       "type": "checkbox",
       "field": "interests",
       "label": "Areas of interest",
-      "options": "Newsletter,Events,Product updates"
+      "options": "Newsletter,Events,Product updates",
+      "section": "Your enquiry"
     },
     {
       "type": "toggle",
       "field": "subscribe",
       "label": "Subscribe to updates",
-      "default": "true"
+      "default": "true",
+      "section": "Your enquiry"
     },
     {
       "type": "submit",
