@@ -1,6 +1,6 @@
 ---
 title: Form block demo
-description: Test page for the form block sourced from the contact-form sheet.
+description: Test page for the multi-section form block sourced from the contact-form sheet.
 template: document
 ---
 
@@ -10,10 +10,12 @@ Use this page to validate the form block. The block loads field definitions from
 
 | Form |
 | --- |
-| [contact-form.json](https://main--drago-toolkit--adobedevxsc.aem.live/intake/contact-form.json) |
+| [/intake/contact-form.json](/intake/contact-form.json) |
 
 ## What this exercises
 
+- Multi-section layout with right-side section nav and mobile stepper
+- Section validation on Next, checkmarks for completed sections, and submit when all sections validate
 - Text, email, tel, textarea, select, radio, checkbox, and toggle fields
 - Required markers and help text
 - Conditional visibility (`phoneDetail` when contact method is Phone)
