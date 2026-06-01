@@ -139,11 +139,54 @@ function validateSection(sectionEl) {
 }
 
 /**
+ * @param {HTMLFormElement} form
+ * @returns {Set<number>}
+ */
+function getSubmittedSections(form) {
+  const raw = form.dataset.submittedSections;
+  if (!raw) return new Set();
+  return new Set(
+    raw.split(',')
+      .map((value) => Number(value))
+      .filter((index) => Number.isInteger(index) && index >= 0),
+  );
+}
+
+/**
+ * @param {HTMLFormElement} form
+ * @param {number} index
+ */
+function markSectionSubmitted(form, index) {
+  const submitted = getSubmittedSections(form);
+  submitted.add(index);
+  form.dataset.submittedSections = [...submitted].sort((a, b) => a - b).join(',');
+}
+
+/**
+ * @param {HTMLFormElement} form
+ * @param {number} activeSection
+ */
+function restoreSubmittedSections(form, activeSection) {
+  for (let i = 0; i < activeSection; i += 1) {
+    markSectionSubmitted(form, i);
+  }
+}
+
+/**
  * @param {HTMLElement} sectionEl
  * @returns {boolean}
  */
 function isSectionComplete(sectionEl) {
   return validateSection(sectionEl);
+}
+
+/**
+ * @param {HTMLFormElement} form
+ * @param {number} index
+ * @returns {boolean}
+ */
+function isSectionSubmitted(form, index) {
+  return getSubmittedSections(form).has(index);
 }
 
 /**
@@ -1049,6 +1092,7 @@ async function handleSubmit(form) {
   if (result.ok && form.dataset.confirmation) {
     window.location.href = form.dataset.confirmation;
   }
+  return result.ok;
 }
 
 /**
@@ -1107,6 +1151,7 @@ async function restoreSharedForm(form, goToSection, refreshNav) {
     cacheShareState(shareId, state);
 
     if (typeof goToSection === 'function' && typeof state.activeSection === 'number') {
+      restoreSubmittedSections(form, state.activeSection);
       goToSection(state.activeSection);
     } else if (typeof refreshNav === 'function') {
       refreshNav();
@@ -1278,9 +1323,15 @@ function activateSection(form, index, sectionEls, navItems, stepperItems) {
  */
 function updateSectionNavState(form, sectionEls, navItems, stepperItems) {
   sectionEls.forEach((sectionEl, i) => {
-    const complete = isSectionComplete(sectionEl);
-    navItems[i]?.classList.toggle('complete', complete);
-    stepperItems[i]?.classList.toggle('complete', complete);
+    const submitted = isSectionSubmitted(form, i);
+    navItems[i]?.classList.toggle('submitted', submitted);
+    stepperItems[i]?.classList.toggle('submitted', submitted);
+    navItems[i]?.setAttribute('aria-label', submitted
+      ? `${sectionEl.querySelector('.form-section-title')?.textContent || 'Section'} — completed`
+      : '');
+    stepperItems[i]?.setAttribute('aria-label', submitted
+      ? `${sectionEl.querySelector('.form-section-title')?.textContent || 'Section'} — completed`
+      : '');
   });
 
   const submitBtn = form.querySelector('.form-submit');
@@ -1357,7 +1408,7 @@ function buildMultiSectionForm(fields, submit, sections) {
     navCheck.setAttribute('aria-hidden', 'true');
     navCheck.textContent = '✓';
 
-    navItem.append(navIndex, navLabel, navCheck);
+    navItem.append(navIndex, navCheck, navLabel);
     navItems.push(navItem);
     nav.append(navItem);
 
@@ -1445,8 +1496,13 @@ function buildMultiSectionForm(fields, submit, sections) {
       return;
     }
     if (form.dataset.action) {
-      await postFormData(form, buildPostBody(form, sectionEl, false));
+      const result = await postFormData(form, buildPostBody(form, sectionEl, false));
+      if (!result.ok) {
+        updateSectionNavState(form, sectionEls, navItems, stepperItems);
+        return;
+      }
     }
+    markSectionSubmitted(form, activeIndex);
     goToSection(activeIndex + 1);
   });
 
@@ -1472,11 +1528,15 @@ function buildMultiSectionForm(fields, submit, sections) {
       form.dataset.confirmation = confirmation.field || confirmation.label || confirmation.default;
     }
 
-    form.addEventListener('submit', (e) => {
+    form.addEventListener('submit', async (e) => {
       e.preventDefault();
       const valid = sectionEls.every((sectionEl) => validateSection(sectionEl));
       if (valid) {
-        handleSubmit(form);
+        const submitted = await handleSubmit(form);
+        if (submitted) {
+          markSectionSubmitted(form, sectionEls.length - 1);
+          updateSectionNavState(form, sectionEls, navItems, stepperItems);
+        }
         return;
       }
 

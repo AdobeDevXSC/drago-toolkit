@@ -305,21 +305,28 @@
 }
 
 .form-multi .form-section-nav-check {
+  display: none;
   flex-shrink: 0;
-  width: 1.25rem;
-  height: 1.25rem;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
   border-radius: 50%;
-  color: transparent;
-  font-size: 11px;
-  font-weight: 700;
-  line-height: 1.25rem;
-  text-align: center;
-}
-
-.form-multi .form-section-nav-item.complete .form-section-nav-check,
-.form-multi .form-stepper-item.complete .form-section-nav-check {
   color: var(--spectrum-white);
   background: var(--spectrum-green-800, #007a4d);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.form-multi .form-section-nav-item.submitted .form-section-nav-index,
+.form-multi .form-stepper-item.submitted .form-section-nav-index {
+  display: none;
+}
+
+.form-multi .form-section-nav-item.submitted .form-section-nav-check,
+.form-multi .form-stepper-item.submitted .form-section-nav-check {
+  display: inline-flex;
 }
 
 .form-multi .form-stepper {
