@@ -351,12 +351,17 @@
   align-items: center;
 }
 
-.form-multi .form-submit {
+.form-multi .form-save-share {
   margin-left: auto;
 }
 
+.form-multi .form-submit:not([hidden]) {
+  margin-left: 0;
+}
+
 .form-multi .form-prev,
-.form-multi .form-next {
+.form-multi .form-next,
+.form-multi .form-save-share {
   min-height: 36px;
   padding: 0 var(--spectrum-spacing-300, 16px);
   border: var(--spectrum-border-width-100) solid var(--spectrum-gray-400);
@@ -370,7 +375,8 @@
 }
 
 .form-multi .form-prev:hover,
-.form-multi .form-next:hover {
+.form-multi .form-next:hover,
+.form-multi .form-save-share:hover {
   border-color: var(--spectrum-gray-500);
   background: var(--spectrum-gray-75);
 }
@@ -401,4 +407,147 @@
   .form-multi .form-stepper {
     display: flex;
   }
+}
+
+/* ---- Saving modal ---- */
+body.form-saving-open,
+body.form-share-open,
+body.layout-side-nav.form-saving-open,
+body.layout-side-nav.form-share-open,
+main.site-content.form-saving-open,
+main.site-content.form-share-open {
+  overflow: hidden;
+}
+
+.form-saving-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spectrum-spacing-400, 24px);
+  background-color: rgb(0 0 0 / 45%);
+  pointer-events: auto;
+}
+
+.form-saving-modal[hidden] {
+  display: none;
+  pointer-events: none;
+}
+
+.form-saving-dialog {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spectrum-spacing-300, 16px);
+  max-width: 22rem;
+  padding: var(--spectrum-spacing-500, 28px) var(--spectrum-spacing-400, 24px);
+  border: 1px solid var(--spectrum-gray-200);
+  border-radius: 8px;
+  background-color: var(--spectrum-gray-50);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 18%);
+  text-align: center;
+}
+
+.form-saving-spinner {
+  width: 2rem;
+  height: 2rem;
+  border: 3px solid var(--spectrum-gray-300);
+  border-top-color: var(--spectrum-blue-800);
+  border-radius: 50%;
+  animation: form-saving-spin 0.8s linear infinite;
+}
+
+.form-saving-message {
+  margin: 0;
+  font-family: var(--spectrum-sans-font-family-stack);
+  font-size: var(--spectrum-font-size-200, 16px);
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--spectrum-gray-900);
+}
+
+@keyframes form-saving-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---- Share modal ---- */
+.form-share-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 10001;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spectrum-spacing-400, 24px);
+  background-color: rgb(0 0 0 / 45%);
+}
+
+.form-share-modal[hidden] {
+  display: none;
+}
+
+.form-share-dialog {
+  width: min(100%, 32rem);
+  padding: var(--spectrum-spacing-500, 28px);
+  border: 1px solid var(--spectrum-gray-200);
+  border-radius: 8px;
+  background-color: var(--spectrum-gray-50);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 18%);
+}
+
+.form-share-title {
+  margin: 0 0 var(--spectrum-spacing-200, 12px);
+  font-size: var(--spectrum-font-size-300, 18px);
+  font-weight: 700;
+  color: var(--spectrum-gray-900);
+}
+
+.form-share-message {
+  margin: 0 0 var(--spectrum-spacing-300, 16px);
+  font-size: var(--spectrum-font-size-100);
+  color: var(--spectrum-gray-700);
+}
+
+.form-share-field {
+  display: flex;
+  align-items: stretch;
+  gap: var(--spectrum-spacing-100, 8px);
+}
+
+.form-share-url {
+  box-sizing: border-box;
+  flex: 1;
+  min-width: 0;
+  padding: var(--spectrum-spacing-100, 8px) var(--spectrum-spacing-200, 12px);
+  border: var(--spectrum-border-width-100) solid var(--spectrum-gray-400);
+  border-radius: var(--spectrum-corner-radius-100);
+  font-family: var(--spectrum-sans-font-family-stack);
+  font-size: var(--spectrum-font-size-75, 12px);
+  color: var(--spectrum-gray-800);
+  background: var(--spectrum-gray-25);
+}
+
+.form-share-copy-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  border: var(--spectrum-border-width-100) solid var(--spectrum-gray-400);
+  border-radius: var(--spectrum-corner-radius-100);
+  color: var(--spectrum-gray-800);
+  background: var(--spectrum-gray-25);
+  cursor: pointer;
+}
+
+.form-share-copy-icon:hover,
+.form-share-copy-icon:focus-visible {
+  border-color: var(--spectrum-blue-800);
+  color: var(--spectrum-blue-800);
+  background: var(--spectrum-gray-75);
+  outline: none;
 }

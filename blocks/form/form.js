@@ -522,6 +522,430 @@ function toggleForm(form, disabled = true) {
   });
 }
 
+let savingModal;
+let shareModal;
+let savingModalCount = 0;
+
+const SHARE_QUERY_PARAM = 'share';
+const SHARE_STORAGE_PREFIX = 'form-share:';
+
+/**
+ * @returns {HTMLElement}
+ */
+function getSavingModal() {
+  if (!savingModal) {
+    savingModal = createElement('div', 'form-saving-modal');
+    savingModal.setAttribute('role', 'dialog');
+    savingModal.setAttribute('aria-modal', 'true');
+    savingModal.setAttribute('aria-labelledby', 'form-saving-message');
+    savingModal.hidden = true;
+
+    const dialog = createElement('div', 'form-saving-dialog');
+    const spinner = createElement('div', 'form-saving-spinner');
+    spinner.setAttribute('aria-hidden', 'true');
+    const message = createElement('p', 'form-saving-message');
+    message.id = 'form-saving-message';
+    message.textContent = 'Updating to save Nissan stress...';
+    dialog.append(spinner, message);
+    savingModal.append(dialog);
+    document.body.append(savingModal);
+  }
+  return savingModal;
+}
+
+/**
+ * @returns {HTMLElement|null}
+ */
+function getScrollLockRoot() {
+  if (document.body.classList.contains('layout-side-nav')) {
+    return document.body;
+  }
+  return document.querySelector('main.site-content') || document.body;
+}
+
+function showSavingModal() {
+  savingModalCount += 1;
+  getSavingModal().hidden = false;
+  getScrollLockRoot().classList.add('form-saving-open');
+}
+
+function hideSavingModal() {
+  savingModalCount = Math.max(0, savingModalCount - 1);
+  if (savingModalCount > 0) return;
+  if (savingModal) savingModal.hidden = true;
+  document.body.classList.remove('form-saving-open');
+  document.querySelector('main.site-content')?.classList.remove('form-saving-open');
+}
+
+/**
+ * @param {string} shareId
+ * @returns {boolean}
+ */
+function isValidShareId(shareId) {
+  return typeof shareId === 'string' && /^[a-zA-Z0-9-]{4,128}$/.test(shareId);
+}
+
+/**
+ * @returns {string|null}
+ */
+function readShareIdFromUrl() {
+  const shareId = new URLSearchParams(window.location.search).get(SHARE_QUERY_PARAM);
+  return isValidShareId(shareId) ? shareId : null;
+}
+
+/**
+ * @param {HTMLFormElement} form
+ * @returns {string|null}
+ */
+function getFormShareId(form) {
+  const fromForm = form.dataset.shareId;
+  if (isValidShareId(fromForm)) return fromForm;
+  return readShareIdFromUrl();
+}
+
+/**
+ * @param {HTMLFormElement} form
+ * @param {string} shareId
+ */
+function setFormShareId(form, shareId) {
+  if (!isValidShareId(shareId)) return;
+  form.dataset.shareId = shareId;
+  if (readShareIdFromUrl() !== shareId) {
+    history.replaceState(null, '', buildShareUrl(shareId));
+  }
+}
+
+/**
+ * @param {HTMLFormElement} form
+ * @param {Object} body
+ * @returns {Object}
+ */
+function withShareKey(form, body) {
+  const shareId = getFormShareId(form);
+  if (!shareId) return body;
+  return { ...body, share_update: shareId };
+}
+
+/**
+ * @param {string} shareId
+ * @returns {string}
+ */
+function buildShareUrl(shareId) {
+  const url = new URL(window.location.href);
+  url.searchParams.set(SHARE_QUERY_PARAM, shareId);
+  return url.toString();
+}
+
+/**
+ * @param {string} shareId
+ * @param {{ data: Object, activeSection: number }} state
+ */
+function cacheShareState(shareId, state) {
+  try {
+    localStorage.setItem(`${SHARE_STORAGE_PREFIX}${shareId}`, JSON.stringify(state));
+  } catch (error) {
+    getConfig().log(error);
+  }
+}
+
+/**
+ * @param {string} shareId
+ * @returns {{ data: Object, activeSection: number }|null}
+ */
+function loadCachedShareState(shareId) {
+  try {
+    const raw = localStorage.getItem(`${SHARE_STORAGE_PREFIX}${shareId}`);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * @param {Response} response
+ * @returns {Promise<string|undefined>}
+ */
+async function parseShareIdFromResponse(response) {
+  const responseText = await response.text();
+  if (!responseText) return undefined;
+
+  try {
+    const parsed = JSON.parse(responseText);
+    const candidate = parsed.shareId || parsed.id || parsed.share_id;
+    return isValidShareId(candidate) ? candidate : undefined;
+  } catch {
+    const candidate = responseText.trim();
+    return isValidShareId(candidate) ? candidate : undefined;
+  }
+}
+
+/**
+ * @param {string} baseUrl
+ * @param {string} shareId
+ * @returns {string}
+ */
+function buildShareRestoreUrl(baseUrl, shareId) {
+  const url = new URL(baseUrl);
+  url.searchParams.set(SHARE_QUERY_PARAM, shareId);
+  return url.href;
+}
+
+/**
+ * @param {unknown} payload
+ * @returns {Object|null}
+ */
+function unwrapShareRecord(payload) {
+  if (Array.isArray(payload)) {
+    if (!payload.length) return null;
+    return payload[0];
+  }
+  if (payload && typeof payload === 'object') return payload;
+  return null;
+}
+
+/**
+ * @param {unknown} payload
+ * @returns {{ data: Object, activeSection: number }|null}
+ */
+function normalizeSharePayload(payload) {
+  const record = unwrapShareRecord(payload);
+  if (!record || typeof record !== 'object') return null;
+
+  const metaKeys = new Set([
+    'shareId', 'id', 'share_id', 'shared', 'complete',
+    'activeSection', 'sectionId', 'savedAt', 'formPath',
+  ]);
+
+  let data = record.data;
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    data = Object.fromEntries(
+      Object.entries(record).filter(([key]) => !metaKeys.has(key)),
+    );
+  }
+
+  if (!Object.keys(data).length) return null;
+
+  return {
+    data,
+    activeSection: typeof record.activeSection === 'number' ? record.activeSection : 0,
+  };
+}
+
+/**
+ * @param {HTMLFormElement} form
+ * @param {string} shareId
+ * @returns {Promise<{ data: Object, activeSection: number }|null>}
+ */
+async function fetchShareState(form, shareId) {
+  const { log } = getConfig();
+  const base = form.dataset.shareRestore || form.dataset.action;
+  if (!base) return null;
+
+  try {
+    const response = await fetch(buildShareRestoreUrl(base, shareId), {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+    if (!response.ok) return null;
+
+    const payload = await response.json();
+    return normalizeSharePayload(payload);
+  } catch (error) {
+    log(error);
+    return null;
+  }
+}
+
+/**
+ * @param {HTMLInputElement|HTMLTextAreaElement|HTMLSelectElement} field
+ * @param {unknown} value
+ * @returns {string|undefined}
+ */
+function formatValueForField(field, value) {
+  if (value === undefined || value === null) return undefined;
+
+  const stringValue = String(value);
+  if (field.type === 'date') {
+    const date = new Date(stringValue);
+    if (!Number.isNaN(date.getTime())) {
+      return date.toISOString().slice(0, 10);
+    }
+  }
+
+  return stringValue;
+}
+
+/**
+ * @param {HTMLFormElement} form
+ * @param {Object} data
+ */
+function applyFormValues(form, data) {
+  [...form.elements].forEach((field) => {
+    if (!field.name || field.disabled) return;
+    const value = formatValueForField(field, data[field.name]);
+    if (value === undefined) return;
+
+    if (field.type === 'checkbox') {
+      const values = value.split(',').map((v) => v.trim());
+      field.checked = values.includes(field.value);
+    } else if (field.type === 'radio') {
+      field.checked = field.value === value;
+    } else {
+      field.value = value;
+    }
+  });
+  form.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
+function hideShareModal() {
+  if (!shareModal) return;
+  shareModal.hidden = true;
+  document.body.classList.remove('form-share-open');
+}
+
+/**
+ * @param {string} text
+ * @returns {Promise<boolean>}
+ */
+async function copyTextToClipboard(text) {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      // fall through to legacy copy
+    }
+  }
+
+  const textarea = createElement('textarea');
+  textarea.value = text;
+  textarea.setAttribute('readonly', '');
+  textarea.style.position = 'fixed';
+  textarea.style.left = '-9999px';
+  textarea.style.top = '0';
+  document.body.append(textarea);
+  textarea.focus();
+  textarea.select();
+  try {
+    return document.execCommand('copy');
+  } catch {
+    return false;
+  } finally {
+    textarea.remove();
+  }
+}
+
+const SHARE_COPY_ICON = `
+  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20" aria-hidden="true">
+    <path fill="currentColor" d="M13 2H6a2 2 0 0 0-2 2v11h1V4h8V2zm3 4H9a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2zm0 13H9V8h7v11z"/>
+  </svg>
+`;
+
+/**
+ * @returns {HTMLElement}
+ */
+function getShareModal() {
+  if (!shareModal) {
+    shareModal = createElement('div', 'form-share-modal');
+    shareModal.setAttribute('role', 'dialog');
+    shareModal.setAttribute('aria-modal', 'true');
+    shareModal.setAttribute('aria-labelledby', 'form-share-title');
+    shareModal.hidden = true;
+
+    const dialog = createElement('div', 'form-share-dialog');
+    const title = createElement('h2', 'form-share-title');
+    title.id = 'form-share-title';
+    title.textContent = 'Save & Share';
+
+    const message = createElement('p', 'form-share-message');
+    message.textContent = 'Copy this link to return to your form later.';
+
+    const field = createElement('div', 'form-share-field');
+    const input = createElement('input');
+    input.className = 'form-share-url';
+    input.type = 'text';
+    input.readOnly = true;
+    input.setAttribute('aria-label', 'Share link');
+
+    const copyIcon = createElement('span', 'form-share-copy-icon');
+    copyIcon.setAttribute('role', 'button');
+    copyIcon.tabIndex = 0;
+    copyIcon.setAttribute('aria-label', 'Copy link');
+    copyIcon.innerHTML = SHARE_COPY_ICON;
+
+    const handleCopy = async () => {
+      const { log } = getConfig();
+      const url = input.value;
+      if (!url) return;
+      const copied = await copyTextToClipboard(url);
+      if (!copied) {
+        log(new Error('Unable to copy share link to clipboard'));
+        input.focus();
+        input.select();
+      }
+      hideShareModal();
+    };
+
+    copyIcon.addEventListener('click', handleCopy);
+    copyIcon.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        handleCopy();
+      }
+    });
+
+    shareModal.addEventListener('click', (event) => {
+      if (event.target === shareModal) hideShareModal();
+    });
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && shareModal && !shareModal.hidden) {
+        hideShareModal();
+      }
+    });
+
+    field.append(input, copyIcon);
+    dialog.append(title, message, field);
+    shareModal.append(dialog);
+    document.body.append(shareModal);
+  }
+  return shareModal;
+}
+
+/**
+ * @param {string} shareUrl
+ */
+function showShareModal(shareUrl) {
+  const modal = getShareModal();
+  const input = modal.querySelector('.form-share-url');
+  if (input instanceof HTMLInputElement) {
+    input.value = shareUrl;
+  }
+  modal.hidden = false;
+  document.body.classList.add('form-share-open');
+  input?.focus();
+  input?.select();
+}
+
+/**
+ * @param {HTMLInputElement|HTMLTextAreaElement|HTMLSelectElement} field
+ * @param {Object} payload
+ */
+function appendFieldToPayload(field, payload) {
+  if (!field.name || field.disabled) return;
+  if (field.type === 'radio') {
+    if (field.checked) payload[field.name] = field.value;
+  } else if (field.type === 'checkbox') {
+    if (field.checked) {
+      payload[field.name] = payload[field.name]
+        ? `${payload[field.name]},${field.value}`
+        : field.value;
+    }
+  } else {
+    payload[field.name] = field.value;
+  }
+}
+
 /**
  * @param {HTMLFormElement} form
  * @returns {Object}
@@ -529,21 +953,90 @@ function toggleForm(form, disabled = true) {
 function generatePayload(form) {
   const payload = {};
   [...form.elements].forEach((field) => {
-    if (field.name && !field.disabled) {
-      if (field.type === 'radio') {
-        if (field.checked) payload[field.name] = field.value;
-      } else if (field.type === 'checkbox') {
-        if (field.checked) {
-          payload[field.name] = payload[field.name]
-            ? `${payload[field.name]},${field.value}`
-            : field.value;
-        }
-      } else {
-        payload[field.name] = field.value;
-      }
-    }
+    appendFieldToPayload(field, payload);
   });
   return payload;
+}
+
+/**
+ * @param {HTMLElement} sectionEl
+ * @returns {Object}
+ */
+function generateSectionPayload(sectionEl) {
+  const payload = {};
+  getVisibleSectionControls(sectionEl).forEach((field) => {
+    appendFieldToPayload(field, payload);
+  });
+  return payload;
+}
+
+/**
+ * @param {HTMLFormElement} form
+ * @param {HTMLElement|null} sectionEl
+ * @param {boolean} complete
+ * @returns {Object}
+ */
+function buildPostBody(form, sectionEl, complete) {
+  if (complete) {
+    const completeInput = form.querySelector('input[name="formComplete"]');
+    if (completeInput instanceof HTMLInputElement) {
+      completeInput.disabled = false;
+      completeInput.value = 'true';
+    }
+    return withShareKey(form, {
+      data: generatePayload(form),
+      complete: true,
+    });
+  }
+
+  return withShareKey(form, {
+    data: generateSectionPayload(sectionEl),
+    section: sectionEl.querySelector('.form-section-title')?.textContent || '',
+    sectionId: sectionEl.dataset.sectionId || '',
+    complete: false,
+  });
+}
+
+/**
+ * @param {HTMLFormElement} form
+ * @param {Object} body
+ * @param {{ disableForm?: boolean }} [options]
+ * @returns {Promise<{ ok: boolean, shareId?: string }>}
+ */
+async function postFormData(form, body, options = {}) {
+  const { log } = getConfig();
+  const { disableForm = false } = options;
+  if (!form.dataset.action) return { ok: false };
+
+  let savingShown = false;
+  let success = false;
+  let shareId;
+  try {
+    if (disableForm) toggleForm(form);
+    showSavingModal();
+    savingShown = true;
+    const response = await fetch(form.dataset.action, {
+      method: 'POST',
+      body: JSON.stringify(body),
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+    if (!response.ok) {
+      throw new Error(`${response.status}: ${response.statusText}`);
+    }
+    shareId = await parseShareIdFromResponse(response);
+    if (shareId) setFormShareId(form, shareId);
+    success = true;
+    return { ok: true, shareId };
+  } catch (error) {
+    log(error);
+    return { ok: false };
+  } finally {
+    const keepOpen = success && disableForm && form.dataset.confirmation;
+    if (savingShown && !keepOpen) hideSavingModal();
+    if (disableForm) toggleForm(form, false);
+  }
 }
 
 /**
@@ -551,28 +1044,75 @@ function generatePayload(form) {
  * @returns {Promise<void>}
  */
 async function handleSubmit(form) {
-  const { log } = getConfig();
+  const body = buildPostBody(form, null, true);
+  const result = await postFormData(form, body, { disableForm: true });
+  if (result.ok && form.dataset.confirmation) {
+    window.location.href = form.dataset.confirmation;
+  }
+}
+
+/**
+ * @param {HTMLFormElement} form
+ * @param {HTMLElement[]} sectionEls
+ * @param {Function} refreshNav
+ * @returns {Promise<void>}
+ */
+async function handleSaveAndShare(form, sectionEls, refreshNav) {
+  if (!form.dataset.action) return;
+
+  const activeSection = Number(form.dataset.activeSection || 0);
+  const data = generatePayload(form);
+  const body = withShareKey(form, {
+    shared: true,
+    complete: false,
+    data,
+    activeSection,
+    sectionId: sectionEls[activeSection]?.dataset.sectionId || '',
+    savedAt: new Date().toISOString(),
+    formPath: window.location.pathname,
+  });
+
+  const result = await postFormData(form, body);
+  if (!result.ok) return;
+
+  const shareId = result.shareId || getFormShareId(form);
+  if (!shareId) return;
+
+  cacheShareState(shareId, { data, activeSection });
+  setFormShareId(form, shareId);
+  showShareModal(buildShareUrl(shareId));
+  refreshNav();
+}
+
+/**
+ * @param {HTMLFormElement} form
+ * @param {Function} goToSection
+ * @param {Function} refreshNav
+ * @returns {Promise<void>}
+ */
+async function restoreSharedForm(form, goToSection, refreshNav) {
+  const shareId = readShareIdFromUrl();
+  if (!shareId) return;
+
+  showSavingModal();
   try {
-    const payload = generatePayload(form);
-    toggleForm(form);
-    const response = await fetch(form.dataset.action, {
-      method: 'POST',
-      body: JSON.stringify({ data: payload }),
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-    if (response.ok) {
-      if (form.dataset.confirmation) {
-        window.location.href = form.dataset.confirmation;
-      }
-    } else {
-      throw new Error(`${response.status}: ${response.statusText}`);
+    let state = await fetchShareState(form, shareId);
+    if (!state?.data) {
+      state = loadCachedShareState(shareId);
     }
-  } catch (error) {
-    log(error);
+    if (!state?.data) return;
+
+    setFormShareId(form, shareId);
+    applyFormValues(form, state.data);
+    cacheShareState(shareId, state);
+
+    if (typeof goToSection === 'function' && typeof state.activeSection === 'number') {
+      goToSection(state.activeSection);
+    } else if (typeof refreshNav === 'function') {
+      refreshNav();
+    }
   } finally {
-    toggleForm(form, false);
+    hideSavingModal();
   }
 }
 
@@ -846,8 +1386,32 @@ function buildMultiSectionForm(fields, submit, sections) {
   submitBtn.textContent = submitField?.field || submitField?.label || 'Submit';
   submitBtn.hidden = true;
 
-  footer.append(prevBtn, nextBtn, submitBtn);
+  const saveShareBtn = createElement('button', 'form-save-share');
+  saveShareBtn.type = 'button';
+  saveShareBtn.textContent = 'Save & Share';
+
+  footer.append(prevBtn, nextBtn, saveShareBtn, submitBtn);
+
+  const completeInput = createElement('input');
+  completeInput.type = 'hidden';
+  completeInput.name = 'formComplete';
+  completeInput.value = '';
+  completeInput.disabled = true;
+  form.append(completeInput);
+
   form.append(footer);
+
+  if (submit) {
+    form.dataset.action = submit;
+    form.dataset.shareRestore = submit;
+  } else {
+    saveShareBtn.hidden = true;
+  }
+
+  const existingShare = readShareIdFromUrl();
+  if (existingShare) {
+    form.dataset.shareId = existingShare;
+  }
 
   enableConditionals(form);
 
@@ -872,7 +1436,7 @@ function buildMultiSectionForm(fields, submit, sections) {
     goToSection(Number(form.dataset.activeSection) - 1);
   });
 
-  nextBtn.addEventListener('click', () => {
+  nextBtn.addEventListener('click', async () => {
     const activeIndex = Number(form.dataset.activeSection);
     const sectionEl = sectionEls[activeIndex];
     if (!validateSection(sectionEl)) {
@@ -880,12 +1444,19 @@ function buildMultiSectionForm(fields, submit, sections) {
       updateSectionNavState(form, sectionEls, navItems, stepperItems);
       return;
     }
+    if (form.dataset.action) {
+      await postFormData(form, buildPostBody(form, sectionEl, false));
+    }
     goToSection(activeIndex + 1);
   });
 
   const refreshNav = () => {
     updateSectionNavState(form, sectionEls, navItems, stepperItems);
   };
+
+  saveShareBtn.addEventListener('click', () => {
+    handleSaveAndShare(form, sectionEls, refreshNav);
+  });
 
   form.addEventListener('input', (e) => {
     refreshNav();
@@ -896,7 +1467,6 @@ function buildMultiSectionForm(fields, submit, sections) {
   form.addEventListener('change', refreshNav);
 
   if (submit) {
-    form.dataset.action = submit;
     const confirmation = fields.find((f) => f.type === 'confirmation');
     if (confirmation) {
       form.dataset.confirmation = confirmation.field || confirmation.label || confirmation.default;
@@ -922,6 +1492,7 @@ function buildMultiSectionForm(fields, submit, sections) {
   }
 
   updateSectionNavState(form, sectionEls, navItems, stepperItems);
+  form.__restoreShare = () => restoreSharedForm(form, goToSection, refreshNav);
   return form;
 }
 
@@ -953,11 +1524,14 @@ function buildFlatForm(fields, submit) {
   enableConditionals(form);
 
   if (submit) {
+    form.dataset.action = submit;
+    form.dataset.shareRestore = submit;
     enableSubmission(form, submit, fields);
   } else {
     enableDeferredSubmission(form);
   }
 
+  form.__restoreShare = () => restoreSharedForm(form);
   return form;
 }
 
@@ -1000,11 +1574,45 @@ function wrapInTheme(form, block) {
 
 /**
  * @param {HTMLElement} block
+ * @returns {{ source: string|null, submit: string|undefined, shareRestore: string|undefined }}
+ */
+function resolveFormEndpoints(block) {
+  const links = [...block.querySelectorAll('a[href]')].map((a) => {
+    try {
+      return new URL(a.getAttribute('href'), window.location.origin).href;
+    } catch {
+      return a.href;
+    }
+  });
+
+  const source = links[0] || null;
+  let submit = links[1];
+  let shareRestore = links[2];
+
+  if (!submit) {
+    const urlPattern = /https?:\/\/[^\s<>"']+/g;
+    const urls = [...new Set(block.textContent.match(urlPattern) || [])];
+    submit = urls.find((url) => {
+      try {
+        return !new URL(url).pathname.endsWith('.json');
+      } catch {
+        return !url.includes('.json');
+      }
+    });
+  }
+
+  if (!shareRestore) shareRestore = submit;
+
+  return { source, submit, shareRestore };
+}
+
+/**
+ * @param {HTMLElement} block
  */
 export default function init(block) {
   const { log } = getConfig();
   block.style.visibility = 'hidden';
-  const [source, submit] = [...block.querySelectorAll('a[href]')].map((a) => a.href);
+  const { source, submit, shareRestore } = resolveFormEndpoints(block);
   if (source) {
     const observer = new IntersectionObserver((entries) => {
       entries.forEach(async (entry) => {
@@ -1015,6 +1623,10 @@ export default function init(block) {
             const { data } = await resp.json();
             if (!data) throw new Error(`No form fields at ${source}`);
             const form = buildForm(data, submit);
+            if (shareRestore) form.dataset.shareRestore = shareRestore;
+            if (readShareIdFromUrl() && typeof form.__restoreShare === 'function') {
+              await form.__restoreShare();
+            }
             block.replaceChildren(wrapInTheme(form, block));
             block.removeAttribute('style');
           } catch (error) {

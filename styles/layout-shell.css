@@ -1,5 +1,6 @@
 /**
- * Spectrum-style app shell: fixed left sidenav + scrollable main/footer column.
+ * Spectrum-style app shell: fixed left sidenav + scrollable content column.
+ * Footer follows page content (not pinned to the viewport).
  * Enabled with body.layout-side-nav (see scripts/ak.js decorateLayout).
  */
 
@@ -10,10 +11,16 @@
   --content-bg: light-dark(var(--color-light), var(--color-dark));
 }
 
+html {
+  min-height: 100%;
+}
+
 body.layout-side-nav {
   padding: 0;
-  height: 100%;
-  overflow: hidden;
+  min-height: 100%;
+  height: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 body.layout-side-nav.has-breadcrumb {
@@ -23,29 +30,29 @@ body.layout-side-nav.has-breadcrumb {
 body.layout-side-nav > sp-theme {
   display: grid;
   grid-template-columns: var(--sidenav-width) 1fr;
-  grid-template-rows: minmax(0, 1fr) auto;
-  min-height: 100vh;
+  grid-template-rows: auto auto;
   min-height: 100dvh;
+  height: auto;
 }
 
-body.layout-side-nav header {
+body.layout-side-nav header,
+body.layout-side-nav header.site-sidenav {
   display: block;
   grid-column: 1;
   grid-row: 1 / -1;
-  align-self: stretch;
+  align-self: start;
   position: sticky;
   top: 0;
   left: auto;
   right: auto;
-  height: auto;
-  max-height: none;
+  height: 100dvh;
+  max-height: 100dvh;
 }
 
 body.layout-side-nav main.site-content {
   grid-column: 2;
   grid-row: 1;
-  min-height: 0;
-  overflow-y: auto;
+  overflow: visible;
   background-color: var(--content-bg);
   padding-top: var(--spacing-l);
 }
@@ -75,7 +82,7 @@ body.layout-side-nav.sidenav-open .sidenav-scrim {
 @media (width < 900px) {
   body.layout-side-nav > sp-theme {
     grid-template-columns: 1fr;
-    grid-template-rows: minmax(0, 1fr);
+    grid-template-rows: auto auto;
   }
 
   body.layout-side-nav header.site-sidenav {
