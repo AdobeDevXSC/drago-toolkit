@@ -5,6 +5,7 @@ import {
   resolveSpectrumColor,
   spectrumThemeDefaults,
 } from '../../scripts/utils/spectrum-theme.js';
+import { ensureFormNavIcons } from '../../deps/spectrum/dist/form-nav-icons.js';
 
 /**
  * @param {string} tag
@@ -15,6 +16,64 @@ function createElement(tag, className) {
   const el = document.createElement(tag);
   if (className) el.className = className;
   return el;
+}
+
+const SECTION_NAV_ICON_COUNT = 5;
+
+const SECTION_NAV_ICON_TAGS = [
+  'sp-icon-document',
+  'sp-icon-user-group',
+  'sp-icon-cloud',
+  'sp-icon-star',
+  'sp-icon-flag',
+];
+
+const SECTION_NAV_ACTIVE_ARROW = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M14.78583,8.37811a.9915.9915,0,0,0-.21417-1.07794L9.94141,2.66992A.98885.98885,0,0,0,8.543,4.06836l2.94238,2.94238H1.87012a.98926.98926,0,0,0,0,1.97852h9.61523L8.543,11.93164a.98885.98885,0,1,0,1.39844,1.39844l4.63025-4.63025A.98831.98831,0,0,0,14.78583,8.37811Z"/></svg>`;
+
+/**
+ * @param {string} tag
+ * @param {string} [className]
+ * @param {{ size?: string, label?: string }} [attrs]
+ * @returns {HTMLElement}
+ */
+function createSpectrumIcon(tag, className, attrs = {}) {
+  const icon = document.createElement(tag);
+  if (className) icon.className = className;
+  icon.setAttribute('size', attrs.size || 's');
+  if (attrs.label) icon.setAttribute('label', attrs.label);
+  return icon;
+}
+
+/**
+ * @param {number} index
+ * @returns {HTMLSpanElement}
+ */
+function buildSectionNavIcon(index) {
+  const iconIndex = index % SECTION_NAV_ICON_COUNT;
+  const wrapper = createElement('span', 'form-section-nav-icon');
+  wrapper.dataset.iconIndex = String(iconIndex);
+  wrapper.setAttribute('aria-hidden', 'true');
+  wrapper.append(createSpectrumIcon(SECTION_NAV_ICON_TAGS[iconIndex], 'form-section-nav-icon-glyph'));
+  return wrapper;
+}
+
+/**
+ * @returns {HTMLSpanElement}
+ */
+function buildSectionNavArrow() {
+  const arrow = createElement('span', 'form-section-nav-arrow');
+  arrow.setAttribute('aria-hidden', 'true');
+  arrow.innerHTML = SECTION_NAV_ACTIVE_ARROW;
+  return arrow;
+}
+
+/**
+ * @returns {HTMLElement}
+ */
+function buildSectionNavCheck() {
+  const check = createSpectrumIcon('sp-icon-checkmark100', 'form-section-nav-check');
+  check.setAttribute('aria-hidden', 'true');
+  return check;
 }
 
 /**
@@ -1356,6 +1415,8 @@ function updateSectionNavState(form, sectionEls, navItems, stepperItems) {
  * @returns {HTMLFormElement}
  */
 function buildMultiSectionForm(fields, submit, sections) {
+  initSpectrum();
+  ensureFormNavIcons();
   const form = createElement('form');
   form.className = 'form-multi';
   form.setAttribute('novalidate', '');
@@ -1400,15 +1461,13 @@ function buildMultiSectionForm(fields, submit, sections) {
     navItem.setAttribute('role', 'tab');
     navItem.setAttribute('aria-controls', sectionEl.id);
 
-    const navIndex = createElement('span', 'form-section-nav-index');
-    navIndex.textContent = String(index + 1);
+    const navIcon = buildSectionNavIcon(index);
+    const navArrow = buildSectionNavArrow();
     const navLabel = createElement('span', 'form-section-nav-label');
     navLabel.textContent = section.label;
-    const navCheck = createElement('span', 'form-section-nav-check');
-    navCheck.setAttribute('aria-hidden', 'true');
-    navCheck.textContent = '✓';
+    const navCheck = buildSectionNavCheck();
 
-    navItem.append(navIndex, navCheck, navLabel);
+    navItem.append(navIcon, navArrow, navCheck, navLabel);
     navItems.push(navItem);
     nav.append(navItem);
 

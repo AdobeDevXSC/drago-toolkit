@@ -39,3 +39,8 @@ execSync(
   'npx esbuild --format=esm --minify ./deps/spectrum/src/index.js --bundle --outfile=./deps/spectrum/dist/index.js',
   { cwd: root, stdio: 'inherit' },
 );
+
+execSync(
+  'npx esbuild --format=esm --minify ./deps/spectrum/src/form-nav-icons.js --bundle --outfile=./deps/spectrum/dist/form-nav-icons.js',
+  { cwd: root, stdio: 'inherit' },
+);
