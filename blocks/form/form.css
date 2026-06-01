@@ -1,0 +1,214 @@
+.form sp-theme.form-spectrum {
+  display: block;
+  font-family: var(--spectrum-sans-font-family-stack);
+  color: var(--spectrum-gray-800);
+}
+
+.form [aria-hidden='true'] {
+  display: none;
+}
+
+.form input,
+.form textarea,
+.form select {
+  box-sizing: border-box;
+  display: block;
+  max-width: 100%;
+  width: 100%;
+  margin: 0;
+  scroll-margin: 1em;
+  border: var(--spectrum-border-width-100) solid var(--spectrum-gray-400);
+  border-radius: var(--spectrum-corner-radius-100);
+  padding: var(--spectrum-spacing-75) var(--spectrum-spacing-200);
+  background-color: var(--spectrum-gray-25);
+  color: var(--spectrum-gray-800);
+  font-family: var(--spectrum-sans-font-family-stack);
+  font-size: var(--spectrum-font-size-100);
+  line-height: var(--spectrum-line-height-100);
+}
+
+.form textarea {
+  resize: vertical;
+}
+
+.form fieldset {
+  appearance: none;
+  margin: 0;
+  border: 0;
+  padding: 0;
+  background-color: transparent;
+}
+
+.form input:hover,
+.form textarea:hover,
+.form select:hover {
+  border-color: var(--spectrum-gray-500);
+}
+
+.form input:focus,
+.form textarea:focus,
+.form select:focus {
+  outline: 2px solid var(--spectrum-blue-800);
+  outline-offset: 2px;
+  border-color: var(--spectrum-blue-800);
+}
+
+.form input:disabled,
+.form input:hover:disabled,
+.form input:focus:disabled,
+.form textarea:disabled,
+.form textarea:hover:disabled,
+.form textarea:focus:disabled,
+.form select:disabled,
+.form select:hover:disabled,
+.form select:focus:disabled,
+.form input[readonly],
+.form textarea[readonly],
+.form select[readonly] {
+  border-color: var(--spectrum-gray-300);
+  background-color: var(--spectrum-gray-100);
+  color: var(--spectrum-gray-700);
+}
+
+.form input[readonly]:focus,
+.form textarea[readonly]:focus,
+.form select[readonly]:focus {
+  outline: 0;
+}
+
+.form input[type='checkbox'],
+.form input[type='radio'] {
+  width: unset;
+}
+
+.form label,
+.form legend {
+  display: block;
+}
+
+.form label[data-required]::after,
+.form legend[data-required]::after {
+  content: '*';
+  margin-left: 0.25ch;
+  color: var(--spectrum-red-800);
+}
+
+.form .form-field > label:first-child,
+.form .form-field > legend {
+  font-weight: var(--spectrum-bold-font-weight);
+  font-size: var(--spectrum-font-size-100);
+  color: var(--spectrum-gray-800);
+}
+
+.form .form-field + .form-field {
+  margin-top: var(--spectrum-spacing-300);
+}
+
+.form .form-field.checkbox-field label,
+.form .form-field.radio-field label {
+  position: relative;
+  padding-left: calc(1em + 1ch);
+  font-size: var(--spectrum-font-size-100);
+  line-height: 44px;
+  cursor: pointer;
+}
+
+.form .form-field.checkbox-field label input,
+.form .form-field.radio-field label input,
+.form .form-field.toggle-field label input {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  transform: translateY(-50%);
+  margin: 0;
+  width: 1em;
+  height: 1em;
+  cursor: pointer;
+}
+
+.form .form-field.checkbox-field label input:disabled,
+.form .form-field.radio-field label input:disabled {
+  cursor: default;
+}
+
+@media (width >= 600px) {
+  .form .form-field.checkbox-field,
+  .form .form-field.radio-field {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25ch 1em;
+  }
+}
+
+.form .form-field.toggle-field label {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 1ch;
+  min-height: 44px;
+}
+
+.form .form-field.toggle-field label input {
+  width: 2em;
+  opacity: 0;
+  border-radius: 50%;
+}
+
+.form .form-field.toggle-field label span {
+  position: relative;
+  width: calc(2em + (2 * 1px));
+  height: calc(1em + (2 * 1px));
+  border-radius: 1em;
+  border: 1px solid var(--spectrum-gray-600);
+  background-color: var(--spectrum-gray-600);
+  transition: background-color 0.2s;
+  cursor: pointer;
+}
+
+.form .form-field.toggle-field label span::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 0;
+  transform: translateY(-50%);
+  width: 1em;
+  height: 1em;
+  border-radius: 50%;
+  background-color: var(--spectrum-gray-25);
+  transition: left 0.2s;
+}
+
+.form .form-field.toggle-field label input:checked + span {
+  background-color: var(--spectrum-blue-800);
+  border-color: var(--spectrum-blue-800);
+}
+
+.form .form-field.toggle-field label input:checked + span::after {
+  left: calc(100% - 1em);
+}
+
+.form .form-field.toggle-field label input:disabled + span {
+  border-color: var(--spectrum-gray-300);
+  background-color: var(--spectrum-gray-300);
+  cursor: default;
+}
+
+.form .form-field.toggle-field label input:disabled + span::after {
+  background-color: var(--spectrum-gray-100);
+}
+
+.form .field-help-text {
+  margin-top: var(--spectrum-spacing-75);
+  color: var(--spectrum-gray-700);
+  font-size: var(--spectrum-font-size-75);
+  line-height: var(--spectrum-line-height-100);
+}
+
+.form .button-wrapper {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spectrum-spacing-200);
+  margin-top: var(--spectrum-spacing-400);
+  align-items: center;
+}

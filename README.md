@@ -94,7 +94,18 @@ Default content is content that lives outside a block.
 
 ## Design System
 
-### Spacing & Gap
+This project adopts [Spectrum 2](https://s2.spectrum.adobe.com/) via [Spectrum Web Components](https://opensource.adobe.com/spectrum-web-components/migrating-to-spectrum2/) (`system="spectrum-two"`) across **site pages, blocks, and tools**.
+
+### Spectrum 2 (project-wide)
+
+1. After `npm i`, run `npm run build:deps` (or `npm run build:spectrum`) to generate `deps/spectrum/dist/`.
+2. **Site:** `head.html` loads `/deps/spectrum/dist/tokens.css` and `styles/spectrum-bridge.css`; `scripts/scripts.js` calls `initSpectrum()` and wraps the page in `<sp-theme>`.
+3. **Blocks / tools:** import `initSpectrum` from `scripts/utils/spectrum-theme.js` (or `tools/shared/spectrum-theme.js`) before using `sp-*` elements.
+4. Verify: any authored page via `aem up`, or `/tools/spectrum-demo/spectrum-demo.html`.
+
+See `deps/spectrum/README.md`. Track migration in [issue #1](https://github.com/AdobeDevXSC/drago-toolkit/issues/1).
+
+### Spacing & Gap (legacy aliases — bridged to Spectrum where noted in spectrum-bridge.css)
 XS, S, M, L, XL, XXL
 
 ### Emphasis

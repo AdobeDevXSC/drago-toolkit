@@ -1,0 +1,82 @@
+{
+  "total": 11,
+  "offset": 0,
+  "limit": 11,
+  "data": [
+    {
+      "type": "text",
+      "field": "fullName",
+      "label": "Full name",
+      "required": "true",
+      "placeholder": "Enter your full name"
+    },
+    {
+      "type": "email",
+      "field": "email",
+      "label": "Email address",
+      "required": "true",
+      "placeholder": "you@example.com",
+      "help": "We will only use this to respond to your enquiry."
+    },
+    {
+      "type": "tel",
+      "field": "phone",
+      "label": "Phone number",
+      "placeholder": "+1 555 0100",
+      "help": "Optional. Include country code if outside the US."
+    },
+    {
+      "type": "select",
+      "field": "topic",
+      "label": "Topic",
+      "required": "true",
+      "placeholder": "Please select",
+      "options": "General enquiry,Partnership,Support"
+    },
+    {
+      "type": "radio",
+      "field": "contactMethod",
+      "label": "Preferred contact method",
+      "required": "true",
+      "default": "Email",
+      "options": "Phone,Email"
+    },
+    {
+      "type": "text",
+      "field": "phoneDetail",
+      "label": "Best number to reach you",
+      "help": "Shown when Phone is selected.",
+      "conditional": "contactMethod-phone"
+    },
+    {
+      "type": "textarea",
+      "field": "message",
+      "label": "Message",
+      "required": "true",
+      "placeholder": "How can we help?"
+    },
+    {
+      "type": "checkbox",
+      "field": "interests",
+      "label": "Areas of interest",
+      "options": "Newsletter,Events,Product updates"
+    },
+    {
+      "type": "toggle",
+      "field": "subscribe",
+      "label": "Subscribe to updates",
+      "default": "true"
+    },
+    {
+      "type": "submit",
+      "label": "Send message"
+    },
+    {
+      "type": "confirmation",
+      "label": "/intake/thank-you"
+    }
+  ],
+  ":colWidths": [80, 120, 180, 80, 80, 140, 200, 200, 180, 120, 140],
+  ":sheetname": "shared-aem",
+  ":type": "sheet"
+}

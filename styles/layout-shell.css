@@ -1,0 +1,113 @@
+/**
+ * Spectrum-style app shell: fixed left sidenav + scrollable main/footer column.
+ * Enabled with body.layout-side-nav (see scripts/ak.js decorateLayout).
+ */
+
+:root {
+  --sidenav-width: 240px;
+  --mobile-nav-height: 56px;
+  --sidenav-bg: light-dark(var(--color-gray-100), var(--color-gray-900));
+  --content-bg: light-dark(var(--color-light), var(--color-dark));
+}
+
+body.layout-side-nav {
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+body.layout-side-nav.has-breadcrumb {
+  margin: 0;
+}
+
+body.layout-side-nav > sp-theme {
+  display: grid;
+  grid-template-columns: var(--sidenav-width) 1fr;
+  grid-template-rows: minmax(0, 1fr) auto;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+body.layout-side-nav header {
+  display: block;
+  grid-column: 1;
+  grid-row: 1 / -1;
+  align-self: stretch;
+  position: sticky;
+  top: 0;
+  left: auto;
+  right: auto;
+  height: auto;
+  max-height: none;
+}
+
+body.layout-side-nav main.site-content {
+  grid-column: 2;
+  grid-row: 1;
+  min-height: 0;
+  overflow-y: auto;
+  background-color: var(--content-bg);
+  padding-top: var(--spacing-l);
+}
+
+body.layout-side-nav footer {
+  grid-column: 2;
+  grid-row: 2;
+  background-color: var(--content-bg);
+}
+
+body.layout-side-nav .sidenav-scrim {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  border: none;
+  padding: 0;
+  margin: 0;
+  background: rgb(0 0 0 / 40%);
+  cursor: pointer;
+}
+
+body.layout-side-nav.sidenav-open .sidenav-scrim {
+  display: block;
+}
+
+@media (width < 900px) {
+  body.layout-side-nav > sp-theme {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 1fr);
+  }
+
+  body.layout-side-nav header.site-sidenav {
+    position: fixed;
+    inset: 0 auto 0 0;
+    z-index: 1001;
+    width: min(var(--sidenav-width), 88vw);
+    max-width: 100%;
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
+    box-shadow: none;
+  }
+
+  body.layout-side-nav.sidenav-open header.site-sidenav {
+    transform: translateX(0);
+    box-shadow: 4px 0 24px rgb(0 0 0 / 12%);
+  }
+
+  body.layout-side-nav main.site-content {
+    grid-column: 1;
+    grid-row: 1;
+    padding-top: calc(var(--mobile-nav-height) + var(--spacing-l));
+  }
+
+  body.layout-side-nav footer {
+    grid-column: 1;
+    grid-row: 2;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.layout-side-nav header.site-sidenav {
+    transition: none;
+  }
+}

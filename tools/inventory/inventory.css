@@ -243,6 +243,25 @@ ema-inventory *::after {
   color: var(--spectrum-gray-600);
 }
 
+/* URL pick panel: primary action stays in the header so it is visible above long analysis tables */
+.ema-inv__panel-head--url-pick {
+  align-items: flex-start;
+  gap: 10px 16px;
+}
+
+.ema-inv__url-pick-head-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 200px;
+}
+
+.ema-inv__url-pick-select-all {
+  flex-shrink: 0;
+  align-self: center;
+}
+
 .ema-inv__panel-note {
   margin: 0;
   padding: 8px 16px 10px;
@@ -299,7 +318,7 @@ ema-inventory *::after {
   gap: 0;
 }
 
-@media (max-width: 720px) {
+@media (width <= 720px) {
   .ema-inv__compare-columns {
     grid-template-columns: 1fr;
   }
@@ -315,7 +334,7 @@ ema-inventory *::after {
   border-right: none;
 }
 
-@media (max-width: 720px) {
+@media (width <= 720px) {
   .ema-inv__compare-column {
     border-right: none;
     border-bottom: 1px solid var(--spectrum-gray-200);
@@ -376,8 +395,7 @@ ema-inventory *::after {
 }
 
 .ema-inv-sp-tabs__tablist-wrap {
-  overflow-x: auto;
-  overflow-y: hidden;
+  overflow: auto hidden;
   margin-bottom: 0;
   border-bottom: 1px solid var(--spectrum-gray-300);
 }
@@ -538,14 +556,6 @@ tr.ema-inv__analysis-select-row--selected:hover {
 
 .ema-inv__field--compact {
   margin: 0 16px 12px;
-}
-
-.ema-inv__url-pick-actions {
-  margin: 0 16px 12px;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
 }
 
 .ema-inv__url-pick-list {
@@ -1015,7 +1025,7 @@ tr.ema-inv__analysis-select-row--selected:hover {
   align-items: start;
 }
 
-@media (max-width: 720px) {
+@media (width <= 720px) {
   .ema-inv-migrate {
     grid-template-columns: 1fr;
     justify-items: center;
@@ -1032,7 +1042,9 @@ tr.ema-inv__analysis-select-row--selected:hover {
   width: 100%;
   height: 100%;
   border-radius: 50%;
+
   --ema-migrate-pct: 0%;
+
   background: conic-gradient(
     var(--spectrum-blue-800) 0 var(--ema-migrate-pct),
     var(--spectrum-gray-300) var(--ema-migrate-pct) 100%

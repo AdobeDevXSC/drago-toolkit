@@ -5,13 +5,15 @@
   "description": "Powerfully simple experiences.",
   "scripts": {
     "lint:js": "eslint .",
-    "lint:css": "stylelint blocks/**/*.css styles/*.css",
+    "lint:css": "stylelint blocks/**/*.css styles/**/*.css tools/**/*.css",
     "lint": "npm run lint:js && npm run lint:css",
     "test": "wtr \"./test/**/*.test.(js|html)\" --node-resolve --port=2000 --coverage --concurrent-browsers 4",
     "test:watch": "npm test -- --watch",
     "test:file": "wtr --node-resolve --port=2000 --coverage",
     "test:file:watch": "wtr --config ./web-test-runner.config.mjs --node-resolve --port=2000 --coverage --watch",
-    "build:lit": "esbuild --format=esm --minify ./deps/lit/src/index.js --bundle --outfile=./deps/lit/dist/index.js"
+    "build:lit": "esbuild --format=esm --minify ./deps/lit/src/index.js --bundle --outfile=./deps/lit/dist/index.js",
+    "build:spectrum": "node scripts/build-spectrum.mjs",
+    "build:deps": "npm run build:lit && npm run build:spectrum"
   },
   "repository": {
     "type": "git",
@@ -39,6 +41,9 @@
     "stylelint-config-standard": "^40.0.0"
   },
   "dependencies": {
+    "@spectrum-web-components/button": "^1.12.1",
+    "@spectrum-web-components/styles": "^1.12.1",
+    "@spectrum-web-components/theme": "^1.12.1",
     "esbuild": "^0.25.10",
     "lit": "^3.3.1"
   }

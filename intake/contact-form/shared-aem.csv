@@ -1,0 +1,12 @@
+type,field,label,required,default,placeholder,options,help,conditional
+text,fullName,Full name,true,,Enter your full name,,,
+email,email,Email address,true,,you@example.com,,We will only use this to respond to your enquiry.,
+tel,phone,Phone number,false,,+1 555 0100,,Optional. Include country code if outside the US.,
+select,topic,Topic,true,,Please select,General enquiry,Partnership,Support,,
+radio,contactMethod,Preferred contact method,true,Email,,Phone,Email,,
+text,phoneDetail,Best number to reach you,false,,,,Shown when Phone is selected.,contactMethod-phone
+textarea,message,Message,true,,How can we help?,,,
+checkbox,interests,Areas of interest,false,,,Newsletter,Events,Product updates,,
+toggle,subscribe,Subscribe to updates,false,true,,,,
+submit,,Send message,,,,,,
+confirmation,,,/intake/thank-you,,,,,
