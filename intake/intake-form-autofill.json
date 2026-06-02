@@ -1,0 +1,73 @@
+{
+  ":type": "form-autofill",
+  "form": "/intake/intake-form.json",
+  "description": "Sample values for the Autofill test data button on the pilot intake form.",
+  "sections": [
+    {
+      "section": "Submission Info",
+      "fields": {
+        "account-name": "Nissan North America",
+        "submitter-name": "Alex Rivera",
+        "sales-specialist-name": "Jordan Lee",
+        "account-director-name": "Sam Patel",
+        "priority-justification": "Strategic OEM account with active M2C opportunity in FY26."
+      }
+    },
+    {
+      "section": "M2C Opportunity context",
+      "fields": {
+        "dr-number": "DR-123456",
+        "fy26-aem-sites-license-gnarr-estimated": "$250,000",
+        "additional-license-opps": "ASO, LLMO, AEM Assets",
+        "additional-license-opps-value-estimated": "$75,000",
+        "current-aem-sites-deployments": "On-prem,AMS",
+        "name-of-cse": "Taylor Nguyen",
+        "aem-sites-renewal-date": "2026-09-30",
+        "current-aem-sites-arr": "$500,000",
+        "barriers-to-move-to-cloud": "Legacy integrations and partner-managed hosting contracts.",
+        "compelling-reason-to-move-to-cloud": "Executive mandate to reduce TCO and accelerate digital launches.",
+        "is-xsc-engaged": "Yes",
+        "xsc-name": "Chris Morgan",
+        "partner-or-acs-engaged": "Partner",
+        "name-of-partners": "Accenture",
+        "other-agency-partner-relationships": "Outsourced content ops to Accenture.",
+        "customer-scoped-m2c-on-cs": "No"
+      }
+    },
+    {
+      "section": "EDS Context",
+      "fields": {
+        "eds-awareness-level": "Actively evaluating(ed)",
+        "xsc-eds-da-demo": "Recently (within 4-8 wks)",
+        "customer-objections-to-eds": "Concerns about document-based authoring for complex components.",
+        "headless-architecture": "Evaluating SPA with GraphQL content layer.",
+        "other-adobe-program-teams": "No"
+      }
+    },
+    {
+      "section": "PBYB project",
+      "fields": {
+        "key-customer-contacts": "Maria Gonzalez (VP Digital), James Wu (Platform Lead)",
+        "relevant-urls-for-migration": "https://www.nissanusa.com/\nhttps://www.nissanusa.com/vehicles/",
+        "compelling-site-sections-or-use-cases": "Vehicle detail pages, dealer locator, EV hub.",
+        "migration-type": "1:1 Migration",
+        "new-design-access": "Figma shared with delivery team.",
+        "predicted-value-proof": "# of pages migrated"
+      }
+    },
+    {
+      "section": "Prototype scope",
+      "fields": {
+        "target-section-includes-commerce": "No",
+        "commerce-platform": "Adobe Commerce",
+        "csc-in-scope": "No",
+        "csc-tooling-workflow": "AEM Assets",
+        "personalization-in-scope": "Future phase",
+        "personalization-tool": "Adobe Target",
+        "personalization-server-or-client-side": "Client-side",
+        "other-material-integrations": "Salesforce CRM, Marketo",
+        "interested-in-aem-agentic-tools": "ASO,LLMO"
+      }
+    }
+  ]
+}

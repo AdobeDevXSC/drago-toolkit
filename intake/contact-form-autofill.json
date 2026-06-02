@@ -1,0 +1,26 @@
+{
+  ":type": "form-autofill",
+  "form": "/intake/contact-form.json",
+  "description": "Sample values for the Autofill test data button on the contact form demo.",
+  "sections": [
+    {
+      "section": "Contact details",
+      "fields": {
+        "fullName": "Jane Smith",
+        "email": "jane.smith@example.com",
+        "phone": "+1 555 0100"
+      }
+    },
+    {
+      "section": "Your enquiry",
+      "fields": {
+        "topic": "Partnership",
+        "contactMethod": "Phone",
+        "phoneDetail": "+1 555 0100",
+        "message": "I would like to learn more about your services.",
+        "interests": "Newsletter,Events",
+        "subscribe": "true"
+      }
+    }
+  ]
+}

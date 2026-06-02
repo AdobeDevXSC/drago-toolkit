@@ -13,6 +13,8 @@
     "test:file:watch": "wtr --config ./web-test-runner.config.mjs --node-resolve --port=2000 --coverage --watch",
     "build:lit": "esbuild --format=esm --minify ./deps/lit/src/index.js --bundle --outfile=./deps/lit/dist/index.js",
     "build:spectrum": "node scripts/build-spectrum.mjs",
+    "build:form": "node scripts/build-form-json.mjs",
+    "build:form:watch": "node scripts/build-form-json.mjs --watch",
     "build:deps": "npm run build:lit && npm run build:spectrum"
   },
   "repository": {

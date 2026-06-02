@@ -428,7 +428,11 @@
 
 .form-multi .form-prev,
 .form-multi .form-next,
-.form-multi .form-save-share {
+.form-multi .form-save-share,
+.form-multi .form-autofill,
+.form-multi .form-reset-session,
+.form-toolbar .form-autofill,
+.form-toolbar .form-reset-session {
   min-height: 36px;
   padding: 0 var(--spectrum-spacing-300, 16px);
   border: var(--spectrum-border-width-100) solid var(--spectrum-gray-400);
@@ -443,9 +447,20 @@
 
 .form-multi .form-prev:hover,
 .form-multi .form-next:hover,
-.form-multi .form-save-share:hover {
+.form-multi .form-save-share:hover,
+.form-multi .form-autofill:hover,
+.form-multi .form-reset-session:hover,
+.form-toolbar .form-autofill:hover,
+.form-toolbar .form-reset-session:hover {
   border-color: var(--spectrum-gray-500);
   background: var(--spectrum-gray-75);
+}
+
+.form-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spectrum-spacing-200, 12px);
+  margin-top: var(--spectrum-spacing-500, 28px);
 }
 
 .form-multi .form-prev:disabled {

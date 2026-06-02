@@ -24,6 +24,7 @@
       "type": "tel",
       "field": "phone",
       "label": "Phone number",
+      "required": "false",
       "placeholder": "+1 555 0100",
       "help": "Optional. Include country code if outside the US.",
       "section": "Contact details"
@@ -50,6 +51,7 @@
       "type": "text",
       "field": "phoneDetail",
       "label": "Best number to reach you",
+      "required": "false",
       "help": "Shown when Phone is selected.",
       "conditional": "contactMethod-phone",
       "section": "Your enquiry"
@@ -66,6 +68,7 @@
       "type": "checkbox",
       "field": "interests",
       "label": "Areas of interest",
+      "required": "false",
       "options": "Newsletter,Events,Product updates",
       "section": "Your enquiry"
     },
@@ -73,6 +76,7 @@
       "type": "toggle",
       "field": "subscribe",
       "label": "Subscribe to updates",
+      "required": "false",
       "default": "true",
       "section": "Your enquiry"
     },
@@ -82,10 +86,24 @@
     },
     {
       "type": "confirmation",
-      "label": "/intake/thank-you"
+      "required": "/intake/thank-you"
     }
   ],
-  ":colWidths": [80, 120, 180, 80, 80, 140, 200, 200, 180, 120, 140],
+  ":colWidths": [
+    80,
+    120,
+    180,
+    80,
+    80,
+    140,
+    200,
+    200,
+    180,
+    120,
+    140,
+    140,
+    140
+  ],
   ":sheetname": "shared-aem",
   ":type": "sheet"
 }
