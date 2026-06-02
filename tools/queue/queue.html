@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Pilot Applications</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="/deps/spectrum/dist/tokens.css" />
+    <link rel="stylesheet" href="/tools/queue/queue.css" />
+  </head>
+  <body>
+    <div id="queue-root"></div>
+    <script type="module">
+      import init from '/tools/queue/queue.js';
+      const root = document.getElementById('queue-root');
+      if (root) init(root);
+    </script>
+  </body>
+</html>
