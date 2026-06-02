@@ -11,12 +11,13 @@ Use this page to validate the form block. The block loads field definitions from
 | Form |
 | --- |
 | [/intake/contact-form.json](/intake/contact-form.json) |
+| [Submit endpoint](https://hook.fusion.adobe.com/0kcbtq67fawhez2i2dirnpffmby1hhil) |
 
 ## What this exercises
 
 - Multi-section layout with right-side section nav and mobile stepper
-- Section validation on Next, checkmarks for completed sections, and submit when all sections validate
+- Section validation on Next, section POST on Next, checkmarks for completed sections, and final submit with `formComplete`
 - Text, email, tel, textarea, select, radio, checkbox, and toggle fields
 - Required markers and help text
 - Conditional visibility (`phoneDetail` when contact method is Phone)
-- Submit button styling and client-side validation (submission deferred until an endpoint is linked)
+- Submit button styling, Fusion webhook POST on Next/submit, and redirect to thank-you on completion

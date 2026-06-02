@@ -376,8 +376,6 @@ body.layout-side-nav header.site-sidenav {
   right: auto;
   z-index: 100;
   overflow: hidden auto;
-  max-height: none;
-  height: 100%;
   width: var(--sidenav-width);
   background-color: var(--sidenav-bg);
   border-right: 1px solid light-dark(var(--color-gray-200), var(--color-gray-600));

@@ -13,6 +13,7 @@ Produces:
 | Output | Purpose |
 |--------|---------|
 | `dist/index.js` | `sp-theme`, `sp-button`, Spectrum 2 theme fragments |
+| `dist/form-nav-icons.js` | Workflow/UI icons for multi-section form nav |
 | `dist/tokens.css` | `tokens-v2` + typography custom properties |
 
 Run `npm run build:deps` to rebuild Lit and Spectrum together.
