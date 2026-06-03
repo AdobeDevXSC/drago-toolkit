@@ -1,4 +1,5 @@
 import { getConfig } from '../../scripts/ak.js';
+import { showSubmitModal, hideSubmitModal } from '../submit-modal/submit-modal.js';
 import { toCamelCase, toClassName } from '../../scripts/utils/string.js';
 import {
   initSpectrum,
@@ -624,37 +625,11 @@ function toggleForm(form, disabled = true) {
   });
 }
 
-let savingModal;
 let shareModal;
-let savingModalCount = 0;
 
 const SHARE_QUERY_PARAM = 'share';
 const SHARE_STORAGE_PREFIX = 'form-share:';
 const RESET_QUERY_PARAM = 'reset';
-
-/**
- * @returns {HTMLElement}
- */
-function getSavingModal() {
-  if (!savingModal) {
-    savingModal = createElement('div', 'form-saving-modal');
-    savingModal.setAttribute('role', 'dialog');
-    savingModal.setAttribute('aria-modal', 'true');
-    savingModal.setAttribute('aria-labelledby', 'form-saving-message');
-    savingModal.hidden = true;
-
-    const dialog = createElement('div', 'form-saving-dialog');
-    const spinner = createElement('div', 'form-saving-spinner');
-    spinner.setAttribute('aria-hidden', 'true');
-    const message = createElement('p', 'form-saving-message');
-    message.id = 'form-saving-message';
-    message.textContent = 'Updating to save Nissan stress...';
-    dialog.append(spinner, message);
-    savingModal.append(dialog);
-    document.body.append(savingModal);
-  }
-  return savingModal;
-}
 
 /**
  * @returns {HTMLElement|null}
@@ -664,20 +639,6 @@ function getScrollLockRoot() {
     return document.body;
   }
   return document.querySelector('main.site-content') || document.body;
-}
-
-function showSavingModal() {
-  savingModalCount += 1;
-  getSavingModal().hidden = false;
-  getScrollLockRoot().classList.add('form-saving-open');
-}
-
-function hideSavingModal() {
-  savingModalCount = Math.max(0, savingModalCount - 1);
-  if (savingModalCount > 0) return;
-  if (savingModal) savingModal.hidden = true;
-  document.body.classList.remove('form-saving-open');
-  document.querySelector('main.site-content')?.classList.remove('form-saving-open');
 }
 
 /**
@@ -850,6 +811,26 @@ function unwrapShareRecord(payload) {
   return null;
 }
 
+const SHARE_DATA_META_KEYS = new Set([
+  'key', 'submitted', 'shareId', 'id', 'share_id', 'shared', 'complete',
+  'activeSection', 'sectionId', 'savedAt', 'formPath',
+]);
+
+/**
+ * @param {Object} data
+ * @returns {Object}
+ */
+function normalizeShareDataKeys(data) {
+  return Object.fromEntries(
+    Object.entries(data)
+      .filter(([key]) => !SHARE_DATA_META_KEYS.has(key))
+      .map(([key, value]) => {
+        const normalizedKey = key.includes('-') ? generateId(key) : key;
+        return [normalizedKey, value];
+      }),
+  );
+}
+
 /**
  * @param {unknown} payload
  * @returns {{ data: Object, activeSection: number }|null}
@@ -858,17 +839,14 @@ function normalizeSharePayload(payload) {
   const record = unwrapShareRecord(payload);
   if (!record || typeof record !== 'object') return null;
 
-  const metaKeys = new Set([
-    'shareId', 'id', 'share_id', 'shared', 'complete',
-    'activeSection', 'sectionId', 'savedAt', 'formPath',
-  ]);
-
-  let data = record.data;
+  let { data } = record;
   if (!data || typeof data !== 'object' || Array.isArray(data)) {
     data = Object.fromEntries(
-      Object.entries(record).filter(([key]) => !metaKeys.has(key)),
+      Object.entries(record).filter(([key]) => !SHARE_DATA_META_KEYS.has(key)),
     );
   }
+
+  data = normalizeShareDataKeys(data);
 
   if (!Object.keys(data).length) return null;
 
@@ -1311,13 +1289,12 @@ async function postFormData(form, body, options = {}) {
   const { disableForm = false } = options;
   if (!form.dataset.action) return { ok: false };
 
-  let savingShown = false;
-  let success = false;
+  let submitModalShown = false;
   let shareId;
   try {
     if (disableForm) toggleForm(form);
-    showSavingModal();
-    savingShown = true;
+    await showSubmitModal();
+    submitModalShown = true;
     const response = await fetch(form.dataset.action, {
       method: 'POST',
       body: JSON.stringify(body),
@@ -1330,14 +1307,12 @@ async function postFormData(form, body, options = {}) {
     }
     shareId = await parseShareIdFromResponse(response);
     if (shareId) setFormShareId(form, shareId);
-    success = true;
     return { ok: true, shareId };
   } catch (error) {
     log(error);
     return { ok: false };
   } finally {
-    const keepOpen = success && disableForm && form.dataset.confirmation;
-    if (savingShown && !keepOpen) hideSavingModal();
+    if (submitModalShown) await hideSubmitModal();
     if (disableForm) toggleForm(form, false);
   }
 }
@@ -1398,7 +1373,7 @@ async function restoreSharedForm(form, goToSection, refreshNav) {
   const shareId = readShareIdFromUrl();
   if (!shareId) return;
 
-  showSavingModal();
+  await showSubmitModal();
   try {
     let state = await fetchShareState(form, shareId);
     if (!state?.data) {
@@ -1417,7 +1392,7 @@ async function restoreSharedForm(form, goToSection, refreshNav) {
       refreshNav();
     }
   } finally {
-    hideSavingModal();
+    await hideSubmitModal();
   }
 }
 
