@@ -975,7 +975,7 @@ function shouldShowDevTools() {
   if (params.get('autofill') === '1' || readResetFromUrl()) return true;
   const { hostname } = window.location;
   if (hostname === 'localhost' || hostname.endsWith('.local')) return true;
-  return hostname.endsWith('.aem.page') || hostname.endsWith('.aem.live');
+  return hostname.endsWith('.aem.page');
 }
 
 /**
