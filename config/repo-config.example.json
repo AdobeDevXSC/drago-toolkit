@@ -1,0 +1,13 @@
+{
+  ":names": ["fusion"],
+  ":type": "multi-sheet",
+  "fusion": {
+    "total": 1,
+    "data": [
+      {
+        "key": "endpoint",
+        "value": "https://hook.fusion.adobe.com/0kcbtq67fawhez2i2dirnpffmby1hhil"
+      }
+    ]
+  }
+}

@@ -73,6 +73,28 @@ For projects that want a few more batteries. Built by the team who brought you d
 * Modern CSS scoping & nesting
 * AEM Operational Telemetry
 
+#### Queue tool / Fusion config
+
+The pilot queue (`tools/queue`) loads its Fusion webhook URL from the repo [DA Config API](https://docs.da.live/developers/api/config) at path `config`, sheet `fusion`, row `key: endpoint`. Example payload: [`config/repo-config.example.json`](config/repo-config.example.json).
+
+POST (create or replace config):
+
+```bash
+curl -X POST 'https://admin.da.live/config/{org}/{repo}/config' \
+  --header 'Authorization: Bearer {IMS_TOKEN}' \
+  --form "config=$(cat config/repo-config.example.json)"
+```
+
+GET (same path; used by the queue on load via `DA_SDK` `token`):
+
+```bash
+curl -X GET 'https://admin.da.live/config/{org}/{repo}/config' \
+  --header 'Authorization: Bearer {IMS_TOKEN}' \
+  --header 'Accept: application/json'
+```
+
+Open the queue from Document Authoring while signed in so the app receives `token` and `context.org` / `context.repo`.
+
 ### Operations
 * Cloudflare Worker reference implementation
 
