@@ -2,20 +2,19 @@
  * DA-embedded queue tool: lists form shares via Fusion webhook.
  *
  * POST body: { share: "all" }
- * Endpoint: form-demo Fusion hook (see intake/form-demo.md).
+ * Endpoint: DA repo config → fusion sheet → key `endpoint` (see config/repo-config.example.json).
  *
  * Fusion list response: array of { json: "<stringified form record>" } wrappers.
  * Each record includes `key` — used as `share` when deleting.
  */
 import DA_SDK from 'https://da.live/nx/utils/sdk.js';
 import { LitElement, html, nothing } from '../../deps/lit/dist/index.js';
+import { loadFusionEndpointFromConfig } from '../shared/da-config.js';
 import { initSpectrum } from '../shared/spectrum-theme.js';
 
 /* global getBlockDetails */
 
 const EL_NAME = 'ema-queue';
-
-const FUSION_ENDPOINT = 'https://hook.fusion.adobe.com/0kcbtq67fawhez2i2dirnpffmby1hhil';
 
 const TITLE_KEYS = ['account-name', 'accountName'];
 const SUBTITLE_KEYS = ['submitter-name', 'submitterName'];
@@ -118,6 +117,19 @@ function postShareDelete(endpoint, shareId) {
  */
 function isDeletableShareId(value) {
   return typeof value === 'string' && value.length > 0 && value !== 'all';
+}
+
+/**
+ * @param {QueueCardRecord} record
+ * @returns {boolean}
+ */
+function isIncompleteSubmission(record) {
+  const { submitted } = record;
+  if (submitted === false) return true;
+  if (typeof submitted === 'string' && submitted.trim().toLowerCase() === 'false') {
+    return true;
+  }
+  return false;
 }
 
 /**
@@ -315,7 +327,6 @@ class EmaQueue extends LitElement {
   static properties = {
     fusionEndpoint: { attribute: false },
     details: { attribute: false },
-    daFetch: { attribute: false },
     context: { attribute: false },
     adminOrigin: { attribute: false },
     _loading: { state: true },
@@ -329,9 +340,8 @@ class EmaQueue extends LitElement {
 
   constructor() {
     super();
-    this.fusionEndpoint = FUSION_ENDPOINT;
+    this.fusionEndpoint = null;
     this.details = {};
-    this.daFetch = null;
     this.context = null;
     this.adminOrigin = 'https://admin.da.live';
     this._loading = false;
@@ -360,6 +370,13 @@ class EmaQueue extends LitElement {
   firstUpdated() {
     if (this._bootstrapped) return;
     this._bootstrapped = true;
+    if (!this.fusionEndpoint) {
+      if (!this._error) {
+        this._error = 'Fusion endpoint not configured. Add fusion.endpoint in repo DA config.';
+      }
+      this.requestUpdate();
+      return;
+    }
     this.loadShares();
   }
 
@@ -393,7 +410,11 @@ class EmaQueue extends LitElement {
   }
 
   async loadShares() {
-    const endpoint = this.fusionEndpoint || FUSION_ENDPOINT;
+    const endpoint = this.fusionEndpoint;
+    if (!endpoint) {
+      this._error = 'Fusion endpoint not configured. Add fusion.endpoint in repo DA config.';
+      return;
+    }
     const preserveExpanded = this._expandedKeys;
     this._loading = true;
     this._error = null;
@@ -428,6 +449,14 @@ class EmaQueue extends LitElement {
     this._pendingDelete = null;
   }
 
+  /**
+   * Set initial error before first render (e.g. from init when config load fails).
+   * @param {string} message
+   */
+  primeError(message) {
+    this._error = message;
+  }
+
   async _confirmDelete() {
     const record = this._pendingDelete;
     if (!record?.shareId) {
@@ -436,7 +465,12 @@ class EmaQueue extends LitElement {
     }
 
     const { shareId } = record;
-    const endpoint = this.fusionEndpoint || FUSION_ENDPOINT;
+    const endpoint = this.fusionEndpoint;
+    if (!endpoint) {
+      this._error = 'Fusion endpoint not configured. Add fusion.endpoint in repo DA config.';
+      this._pendingDelete = null;
+      return;
+    }
     this._pendingDelete = null;
     this._deletingShareId = shareId;
     this._error = null;
@@ -589,20 +623,27 @@ class EmaQueue extends LitElement {
     const chipKeys = new Set(chips.map((c) => c.key));
     const titleKeys = new Set([...TITLE_KEYS, ...SUBTITLE_KEYS]);
     const populated = getPopulatedFields(record);
+    const incomplete = isIncompleteSubmission(record);
     const detailFields = populated.filter(
-      (f) => !titleKeys.has(f.key) && !chipKeys.has(f.key),
+      (f) => !titleKeys.has(f.key) && !chipKeys.has(f.key)
+        && !(incomplete && f.key === 'submitted'),
     );
     const expanded = this._isExpanded(cardId);
     const moreCount = detailFields.length;
 
     return html`
       <article
-        class="ema-queue__card ${expanded ? 'ema-queue__card--expanded' : ''}"
+        class="ema-queue__card ${expanded ? 'ema-queue__card--expanded' : ''} ${incomplete ? 'ema-queue__card--incomplete' : ''}"
         aria-labelledby="ema-queue-card-${cardId}"
       >
         <header class="ema-queue__card-header">
           <div class="ema-queue__card-heading">
-            <p class="ema-queue__card-index">#${displayIndex + 1}</p>
+            <div class="ema-queue__card-meta">
+              <p class="ema-queue__card-index">#${displayIndex + 1}</p>
+              ${incomplete
+                ? html`<span class="ema-queue__badge ema-queue__badge--incomplete">Incomplete</span>`
+                : nothing}
+            </div>
             <h2 class="ema-queue__card-title" id="ema-queue-card-${cardId}">${title}</h2>
             ${subtitle
               ? html`<p class="ema-queue__card-subtitle">${subtitle}</p>`
@@ -720,12 +761,12 @@ class EmaQueue extends LitElement {
 customElements.define(EL_NAME, EmaQueue);
 
 export default async function init(el) {
-  let daFetch = null;
+  let token = null;
   let context = null;
   let adminOrigin = 'https://admin.da.live';
   try {
     const sdk = await DA_SDK;
-    daFetch = sdk.actions?.daFetch ?? null;
+    token = sdk.token ?? null;
     context = sdk.context ?? null;
   } catch {
     /* DA parent not available */
@@ -739,9 +780,35 @@ export default async function init(el) {
 
   const cmp = document.createElement(EL_NAME);
   cmp.details = typeof getBlockDetails === 'function' ? getBlockDetails(el) : {};
-  cmp.daFetch = daFetch;
   cmp.context = context && Object.keys(context).length ? { ...context } : null;
   cmp.adminOrigin = adminOrigin;
+
+  const org = context?.org?.trim();
+  const repo = context?.repo?.trim();
+
+  if (!token) {
+    cmp.primeError('Sign in to Document Authoring to load the queue.');
+  } else if (!org || !repo) {
+    cmp.primeError('Open the queue from Document Authoring (org and repo context required).');
+  } else {
+    try {
+      const endpoint = await loadFusionEndpointFromConfig({
+        token,
+        adminOrigin,
+        org,
+        repo,
+      });
+      if (endpoint) {
+        cmp.fusionEndpoint = endpoint;
+      } else {
+        cmp.primeError('Add a fusion sheet with key "endpoint" in repo config (path: config).');
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to load DA config';
+      cmp.primeError(msg);
+    }
+  }
+
   el.replaceChildren();
   el.append(cmp);
 }

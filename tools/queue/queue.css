@@ -120,6 +120,38 @@ ema-queue *::after {
   border-color: rgb(211 21 16 / 35%);
 }
 
+.ema-queue__card--incomplete {
+  border: 2px solid var(--spectrum-red-800);
+}
+
+.ema-queue__card--incomplete.ema-queue__card--expanded {
+  border-color: var(--spectrum-red-800);
+}
+
+.ema-queue__card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.ema-queue__badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: var(--spectrum-corner-radius-100);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  line-height: 1.35;
+}
+
+.ema-queue__badge--incomplete {
+  color: var(--spectrum-gray-50);
+  background: var(--spectrum-red-800);
+}
+
 .ema-queue__card-header {
   display: flex;
   align-items: flex-start;
@@ -170,7 +202,7 @@ ema-queue *::after {
 }
 
 .ema-queue__card-index {
-  margin: 0 0 4px;
+  margin: 0;
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.04em;
