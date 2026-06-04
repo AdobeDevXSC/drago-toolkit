@@ -197,6 +197,11 @@ ema-queue *::after {
   cursor: not-allowed;
 }
 
+.ema-queue__delete--no-key {
+  opacity: 0.55;
+  cursor: help;
+}
+
 .ema-queue__delete-icon {
   display: block;
 }

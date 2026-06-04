@@ -1,11 +1,12 @@
 /**
  * DA-embedded queue tool: lists form shares via Fusion webhook.
  *
- * POST body: { share: "all" }
+ * POST list: { share: "all" }
+ * POST delete: { delete: "<key>" }
  * Endpoint: DA repo config → fusion sheet → key `endpoint` (see config/repo-config.example.json).
  *
  * Fusion list response: array of { json: "<stringified form record>" } wrappers.
- * Each record includes `key` — used as `share` when deleting.
+ * Each record includes `key` — sent as `delete` when removing a share.
  */
 import DA_SDK from 'https://da.live/nx/utils/sdk.js';
 import { LitElement, html, nothing } from '../../deps/lit/dist/index.js';
@@ -19,8 +20,8 @@ const EL_NAME = 'ema-queue';
 const TITLE_KEYS = ['account-name', 'accountName'];
 const SUBTITLE_KEYS = ['submitter-name', 'submitterName'];
 
-/** Fusion record identifier (inside parsed `json`). */
-const RECORD_KEY_FIELD = 'key';
+/** Fusion share id fields (list row or inner `json`), aligned with form share restore. */
+const SHARE_ID_FIELDS = ['key', 'shareId', 'id', 'share_id'];
 
 /** Short fields surfaced as chips on the card (title/subtitle excluded). */
 const CHIP_FIELD_KEYS = [
@@ -108,7 +109,7 @@ function postShareAll(endpoint) {
  * @returns {Promise<unknown>}
  */
 function postShareDelete(endpoint, shareId) {
-  return postFusion(endpoint, { share: shareId, delete: true });
+  return postFusion(endpoint, { delete: shareId });
 }
 
 /**
@@ -116,7 +117,9 @@ function postShareDelete(endpoint, shareId) {
  * @returns {boolean}
  */
 function isDeletableShareId(value) {
-  return typeof value === 'string' && value.length > 0 && value !== 'all';
+  if (value == null) return false;
+  const s = String(value).trim();
+  return s.length > 0 && s !== 'all';
 }
 
 /**
@@ -133,12 +136,25 @@ function isIncompleteSubmission(record) {
 }
 
 /**
- * @param {Record<string, unknown>} [inner]
+ * @param {Record<string, unknown>} [record]
  * @returns {string}
  */
-function pickShareId(inner) {
-  const value = inner?.[RECORD_KEY_FIELD];
-  return isDeletableShareId(value) ? String(value) : '';
+function pickShareId(record) {
+  if (!record || typeof record !== 'object') return '';
+  for (const field of SHARE_ID_FIELDS) {
+    const value = record[field];
+    if (isDeletableShareId(value)) return String(value).trim();
+  }
+  return '';
+}
+
+/**
+ * @param {Record<string, unknown>} inner parsed `json` object
+ * @param {Record<string, unknown>} wrapper Fusion list row
+ * @returns {string}
+ */
+function resolveShareId(inner, wrapper) {
+  return pickShareId(inner) || pickShareId(wrapper);
 }
 
 /**
@@ -201,7 +217,7 @@ function normalizeFusionQueue(payload) {
             records.push({
               ...data,
               cardId: `${index}-${recordIndex}`,
-              shareId: pickShareId(data),
+              shareId: resolveShareId(data, row),
               queueIndex: index,
               recordIndex,
             });
@@ -221,7 +237,7 @@ function normalizeFusionQueue(payload) {
     records.push({
       ...row,
       cardId: String(index),
-      shareId: pickShareId(row),
+      shareId: resolveShareId(row, row),
       queueIndex: index,
     });
   });
@@ -441,7 +457,12 @@ class EmaQueue extends LitElement {
    */
   _onDeleteClick(record) {
     const { shareId } = record;
-    if (!shareId || this._loading || this._deletingShareId || this._pendingDelete) return;
+    if (this._loading || this._deletingShareId || this._pendingDelete) return;
+    if (!shareId) {
+      this._error = 'Cannot delete: no share key on this row. Fusion must return key, shareId, id, or share_id.';
+      this.requestUpdate();
+      return;
+    }
     this._pendingDelete = record;
   }
 
@@ -490,14 +511,19 @@ class EmaQueue extends LitElement {
   _renderDeleteButton(record) {
     const { shareId } = record;
     const busy = this._deletingShareId === shareId;
-    const disabled = !shareId || this._loading || Boolean(this._deletingShareId)
+    const disabled = this._loading || Boolean(this._deletingShareId)
       || Boolean(this._pendingDelete);
+    const missingKey = !shareId;
+    let label = 'Delete submission';
+    if (busy) label = 'Deleting submission';
+    else if (missingKey) label = 'Delete unavailable (no share key)';
 
     return html`
       <button
         type="button"
-        class="ema-queue__delete"
-        aria-label=${busy ? 'Deleting submission' : 'Delete submission'}
+        class="ema-queue__delete ${missingKey ? 'ema-queue__delete--no-key' : ''}"
+        aria-label=${label}
+        title=${missingKey ? 'No share key on this submission — cannot delete yet' : label}
         ?disabled=${disabled}
         @click=${() => this._onDeleteClick(record)}
       >
