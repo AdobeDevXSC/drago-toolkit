@@ -7,6 +7,13 @@ import {
   spectrumThemeDefaults,
 } from '../../scripts/utils/spectrum-theme.js';
 import { ensureFormNavIcons } from '../../deps/spectrum/dist/form-nav-icons.js';
+import {
+  areRequiredFieldsComplete,
+  getVisibleSectionControls,
+  isFieldHidden,
+  isRequiredFlag,
+  validateSection,
+} from './form-validation.js';
 
 /**
  * @param {string} tag
@@ -117,6 +124,7 @@ function normalizeField(raw) {
   if (!field.type || field.type === 'text') {
     field.type = inferInputType(field);
   }
+  if (isRequiredFlag(field.required)) field.required = 'true';
   return field;
 }
 
@@ -154,51 +162,6 @@ function groupBySection(fields) {
 }
 
 /**
- * @param {HTMLElement} el
- * @returns {boolean}
- */
-function isFieldHidden(el) {
-  const field = el.closest('.form-field');
-  return field?.getAttribute('aria-hidden') === 'true';
-}
-
-/**
- * @param {HTMLElement} sectionEl
- * @returns {HTMLElement[]}
- */
-function getVisibleSectionControls(sectionEl) {
-  return [...sectionEl.querySelectorAll('input, textarea, select')].filter((el) => {
-    if (el.type === 'submit' || el.disabled) return false;
-    return !isFieldHidden(el);
-  });
-}
-
-/**
- * @param {HTMLElement} sectionEl
- * @returns {boolean}
- */
-function validateMultiselectGroups(sectionEl) {
-  let valid = true;
-  sectionEl.querySelectorAll('.multiselect-field[data-required="true"]').forEach((fieldset) => {
-    const checked = fieldset.querySelector('input:checked');
-    fieldset.classList.toggle('invalid', !checked);
-    if (!checked) valid = false;
-  });
-  return valid;
-}
-
-/**
- * @param {HTMLElement} sectionEl
- * @returns {boolean}
- */
-function validateSection(sectionEl) {
-  const controls = getVisibleSectionControls(sectionEl);
-  let valid = controls.every((el) => el.checkValidity());
-  if (!validateMultiselectGroups(sectionEl)) valid = false;
-  return valid;
-}
-
-/**
  * @param {HTMLFormElement} form
  * @returns {Set<number>}
  */
@@ -230,14 +193,6 @@ function restoreSubmittedSections(form, activeSection) {
   for (let i = 0; i < activeSection; i += 1) {
     markSectionSubmitted(form, i);
   }
-}
-
-/**
- * @param {HTMLElement} sectionEl
- * @returns {boolean}
- */
-function isSectionComplete(sectionEl) {
-  return validateSection(sectionEl);
 }
 
 /**
@@ -314,7 +269,7 @@ function buildInput(field) {
   input.type = type || 'text';
   input.id = generateId(fieldName);
   input.name = input.id;
-  input.required = required === 'true';
+  input.required = isRequiredFlag(required);
   if (defaultValue) input.value = defaultValue;
   if (placeholder) input.placeholder = placeholder;
   return input;
@@ -332,7 +287,7 @@ function buildTextArea(field) {
   const textarea = createElement('textarea');
   textarea.id = generateId(fieldName);
   textarea.name = textarea.id;
-  textarea.required = required === 'true';
+  textarea.required = isRequiredFlag(required);
   textarea.rows = 5;
   if (defaultValue) textarea.value = defaultValue;
   if (placeholder) textarea.placeholder = placeholder;
@@ -356,7 +311,7 @@ function buildOptionInput(field, option) {
   input.name = generateId(fieldName);
   input.value = option;
   input.checked = option === defaultValue;
-  input.required = required === 'true';
+  input.required = isRequiredFlag(required);
 
   return input;
 }
@@ -378,13 +333,13 @@ function buildOptions(field, controlled) {
     fieldset.dataset.controller = controller;
     fieldset.dataset.condition = controlled;
   }
-  fieldset.append(buildLabel(label, 'legend', null, required === 'true'));
+  fieldset.append(buildLabel(label, 'legend', null, isRequiredFlag(required)));
 
   const inputType = type === 'multiselect' ? 'checkbox' : type;
   if (type === 'multiselect') {
     fieldset.classList.remove(`${type}-field`);
     fieldset.classList.add('multiselect-field', 'checkbox-field');
-    if (required === 'true') fieldset.dataset.required = 'true';
+    if (isRequiredFlag(required)) fieldset.dataset.required = 'true';
   }
 
   parseOptions(options).forEach((option) => {
@@ -419,12 +374,12 @@ function buildSelect(field, controlled) {
     wrapper.dataset.controller = controller;
     wrapper.dataset.condition = controlled;
   }
-  wrapper.append(buildLabel(label, 'label', generateId(fieldName), required === 'true'));
+  wrapper.append(buildLabel(label, 'label', generateId(fieldName), isRequiredFlag(required)));
 
   const select = createElement('select');
   select.id = generateId(fieldName);
   select.name = select.id;
-  select.required = required === 'true';
+  select.required = isRequiredFlag(required);
   wrapper.append(select);
 
   if (placeholder) {
@@ -472,7 +427,7 @@ function buildToggle(field, controlled) {
   });
 
   const span = createElement('span');
-  const labelEl = buildLabel(label, 'label', input.id, required === 'true');
+  const labelEl = buildLabel(label, 'label', input.id, isRequiredFlag(required));
   labelEl.prepend(input, span);
   wrapper.append(labelEl);
 
@@ -1504,7 +1459,7 @@ function buildField(field) {
     wrapper.dataset.condition = controlled;
   }
   const inputId = generateId(fieldName);
-  wrapper.append(buildLabel(label, 'label', inputId, field.required === 'true'));
+  wrapper.append(buildLabel(label, 'label', inputId, isRequiredFlag(field.required)));
 
   let helpText;
   if (help) {
@@ -1573,16 +1528,23 @@ function updateSectionNavState(form, sectionEls, navItems, stepperItems) {
 
   const submitBtn = form.querySelector('.form-submit');
   if (submitBtn) {
-    const allValid = sectionEls.every((sectionEl) => isSectionComplete(sectionEl));
-    submitBtn.hidden = !allValid;
-    submitBtn.toggleAttribute('disabled', !allValid);
+    const allRequiredComplete = sectionEls.every(
+      (sectionEl) => areRequiredFieldsComplete(sectionEl),
+    );
+    submitBtn.hidden = !allRequiredComplete;
+    submitBtn.toggleAttribute('hidden', !allRequiredComplete);
+    submitBtn.toggleAttribute('disabled', !allRequiredComplete);
   }
 
   const activeIndex = Number(form.dataset.activeSection || 0);
   const prevBtn = form.querySelector('.form-prev');
   const nextBtn = form.querySelector('.form-next');
   if (prevBtn) prevBtn.disabled = activeIndex === 0;
-  if (nextBtn) nextBtn.hidden = activeIndex >= sectionEls.length - 1;
+  if (nextBtn) {
+    const hideNext = activeIndex >= sectionEls.length - 1;
+    nextBtn.hidden = hideNext;
+    nextBtn.toggleAttribute('hidden', hideNext);
+  }
 }
 
 /**
@@ -1673,6 +1635,7 @@ function buildMultiSectionForm(fields, submit, sections) {
   submitBtn.setAttribute('type', 'submit');
   submitBtn.textContent = submitField?.field || submitField?.label || 'Submit';
   submitBtn.hidden = true;
+  submitBtn.toggleAttribute('hidden', true);
 
   const saveShareBtn = createElement('button', 'form-save-share');
   saveShareBtn.type = 'button';
