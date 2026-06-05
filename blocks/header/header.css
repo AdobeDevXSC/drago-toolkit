@@ -369,7 +369,7 @@ header {
 body.layout-side-nav header.site-sidenav {
   --mega-columns: 1;
 
-  display: block;
+  display: none;
   position: sticky;
   top: 0;
   left: auto;
