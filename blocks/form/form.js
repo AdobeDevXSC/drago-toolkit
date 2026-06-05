@@ -887,8 +887,8 @@ function shouldShowDevTools() {
   const params = new URLSearchParams(window.location.search);
   if (params.get('autofill') === '1' || readResetFromUrl()) return true;
   const { hostname } = window.location;
-  if (hostname === 'localhost' || hostname.endsWith('.local')) return true;
-  return hostname.endsWith('.aem.page');
+  // Local dev only — never auto-show on aem.page (preview) or aem.live (prod).
+  return hostname === 'localhost' || hostname.endsWith('.local');
 }
 
 /**
