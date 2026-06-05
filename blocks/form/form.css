@@ -3,6 +3,7 @@
   position: relative;
   box-sizing: border-box;
   max-width: 760px;
+  margin-inline: auto;
   padding: var(--spectrum-spacing-600, 32px) var(--spectrum-spacing-500, 28px);
   border: 1px solid var(--spectrum-gray-200);
   border-radius: var(--form-radius-lg, 12px);
@@ -367,7 +368,13 @@
 
 /* ---- Multi-section form ---- */
 .form-card-multi {
-  max-width: 960px;
+  max-width: 980px;
+}
+
+/* Align the page heading/intro with the centered form card (one 980px column). */
+.section:has(.form) > .default-content,
+.section:has(.form) > .block-content {
+  max-width: 980px;
 }
 
 /* Header band: brand eyebrow + progress bar. */
