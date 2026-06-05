@@ -1872,6 +1872,24 @@ function resolveFormEndpoints(block) {
 }
 
 /**
+ * Extract the field rows from an AEM sheet response, supporting both
+ * single-sheet (`{ data: [...] }`) and multi-sheet (`{ sheetName: { data: [...] } }`)
+ * workbook formats.
+ * @param {Object} json
+ * @returns {Array|null}
+ */
+function extractFormData(json) {
+  if (!json || typeof json !== 'object') return null;
+  if (Array.isArray(json.data)) return json.data;
+  const names = Array.isArray(json[':names']) ? json[':names'] : Object.keys(json);
+  for (let i = 0; i < names.length; i += 1) {
+    const sheet = json[names[i]];
+    if (sheet && Array.isArray(sheet.data)) return sheet.data;
+  }
+  return null;
+}
+
+/**
  * @param {HTMLElement} block
  */
 export default function init(block) {
@@ -1885,7 +1903,7 @@ export default function init(block) {
           try {
             const resp = await fetch(new URL(source, window.location.origin));
             if (!resp.ok) throw new Error(`${resp.status}: ${resp.statusText}`);
-            const { data } = await resp.json();
+            const data = extractFormData(await resp.json());
             if (!data) throw new Error(`No form fields at ${source}`);
             activeAutofillOverrides = await loadAutofillOverrides(source);
             const form = buildForm(data, submit);
