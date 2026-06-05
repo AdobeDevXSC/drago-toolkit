@@ -1,11 +1,24 @@
 /* P1: card shell aligned with pilot-intake (white surface, hairline, 8px radius) */
 .form-card {
+  position: relative;
   box-sizing: border-box;
   max-width: 760px;
-  padding: var(--spectrum-spacing-500, 28px) var(--spectrum-spacing-400, 24px);
+  margin-inline: auto;
+  padding: var(--spectrum-spacing-600, 32px) var(--spectrum-spacing-500, 28px);
   border: 1px solid var(--spectrum-gray-200);
-  border-radius: 8px;
-  background-color: var(--spectrum-gray-50);
+  border-radius: var(--form-radius-lg, 12px);
+  background-color: var(--spectrum-gray-25);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 4%), 0 12px 32px -12px rgb(0 0 0 / 18%);
+  overflow: hidden;
+}
+
+/* Adobe-red brand accent bar across the top of the card. */
+.form-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 4px;
+  background: linear-gradient(90deg, var(--form-brand-deep, #c30d00), var(--form-brand-bright, #fa0f00));
 }
 
 .form sp-theme.form-spectrum {
@@ -18,6 +31,70 @@
   display: none;
 }
 
+/* Design tokens — motion + the balanced palette.
+   Red = brand chrome (top bar, eyebrow, progress). Blue = interactive
+   (focus, primary CTA, active step, selected chips). Red = validation errors. */
+.form {
+  --form-motion-fast: 160ms;
+  --form-motion-base: 220ms;
+  --form-ease: cubic-bezier(0.2, 0, 0, 1);
+
+  /* Adobe brand red — chrome only */
+  --form-brand: #eb1000;
+  --form-brand-bright: #fa0f00;
+  --form-brand-deep: #c30d00;
+  --form-brand-tint: #fdecea;
+
+  /* interactive accent (Spectrum blue) */
+  --form-accent: var(--spectrum-blue-800, #0265dc);
+  --form-accent-strong: var(--spectrum-blue-900, #095aba);
+  --form-accent-hover: var(--spectrum-blue-700, #1473e6);
+  --form-accent-tint: var(--spectrum-blue-100, #e0f2ff);
+  --form-focus-ring: 0 0 0 3px rgb(2 101 220 / 22%);
+
+  /* error */
+  --form-error: var(--spectrum-red-800, #d31510);
+  --form-error-ring: 0 0 0 3px rgb(235 16 0 / 18%);
+  --form-radius-lg: 12px;
+  --form-radius-sm: 6px;
+}
+
+@keyframes form-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes form-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes form-pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 .form input,
 .form textarea,
 .form select {
@@ -25,16 +102,20 @@
   display: block;
   max-width: 100%;
   width: 100%;
+  min-height: 40px;
   margin: 0;
   scroll-margin: 1em;
-  border: var(--spectrum-border-width-100) solid var(--spectrum-gray-400);
-  border-radius: var(--spectrum-corner-radius-100);
-  padding: var(--spectrum-spacing-75, 4px) var(--spectrum-spacing-200, 12px);
+  border: 1.5px solid var(--spectrum-gray-300);
+  border-radius: var(--form-radius-sm, 6px);
+  padding: var(--spectrum-spacing-100, 9px) var(--spectrum-spacing-200, 13px);
   background-color: var(--spectrum-gray-25);
-  color: var(--spectrum-gray-800);
+  color: var(--spectrum-gray-900);
   font-family: var(--spectrum-sans-font-family-stack);
-  font-size: var(--spectrum-font-size-100);
+  font-size: var(--spectrum-font-size-200, 14px);
   line-height: var(--spectrum-line-height-100);
+  transition:
+    border-color var(--form-motion-fast) var(--form-ease),
+    box-shadow var(--form-motion-fast) var(--form-ease);
 }
 
 .form textarea {
@@ -58,9 +139,9 @@
 .form input:focus,
 .form textarea:focus,
 .form select:focus {
-  outline: 2px solid var(--spectrum-blue-800);
-  outline-offset: 2px;
-  border-color: var(--spectrum-blue-800);
+  outline: none;
+  border-color: var(--form-accent);
+  box-shadow: var(--form-focus-ring);
 }
 
 .form input:disabled,
@@ -89,6 +170,27 @@
 .form input[type='checkbox'],
 .form input[type='radio'] {
   width: unset;
+  min-height: 0;
+}
+
+/* Checkbox/radio inputs keep their native size and a focus ring on the box. */
+.form input[type='checkbox']:focus,
+.form input[type='radio']:focus {
+  box-shadow: none;
+}
+
+/* Validation errors — the one place red appears in the interactive layer. */
+.form input[aria-invalid='true'],
+.form textarea[aria-invalid='true'],
+.form select[aria-invalid='true'] {
+  border-color: var(--form-error);
+}
+
+.form input[aria-invalid='true']:focus,
+.form textarea[aria-invalid='true']:focus,
+.form select[aria-invalid='true']:focus {
+  border-color: var(--form-error);
+  box-shadow: var(--form-error-ring);
 }
 
 .form label,
@@ -105,31 +207,73 @@
 
 .form .form-field > label:first-child,
 .form .form-field > legend {
-  font-weight: 500;
-  font-size: var(--spectrum-font-size-75, 12px);
-  color: var(--spectrum-gray-800);
+  margin-bottom: var(--spectrum-spacing-75, 6px);
+  font-weight: 600;
+  font-size: var(--spectrum-font-size-100, 13px);
+  color: var(--spectrum-gray-900);
 }
 
 .form .form-field + .form-field {
   margin-top: var(--spectrum-spacing-300, 16px);
 }
 
+/* Multiselect / radio options rendered as soft chips. */
+.form .form-field.checkbox-field,
+.form .form-field.radio-field {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.form .form-field.checkbox-field > legend,
+.form .form-field.radio-field > legend,
+.form .form-field.checkbox-field > .field-help-text,
+.form .form-field.radio-field > .field-help-text {
+  flex: 0 0 100%;
+}
+
 .form .form-field.checkbox-field label,
 .form .form-field.radio-field label {
-  position: relative;
-  padding-left: calc(1em + 1ch);
-  font-size: var(--spectrum-font-size-100);
-  line-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 9px 14px;
+  border: 1.5px solid var(--spectrum-gray-300);
+  border-radius: 999px;
+  font-size: var(--spectrum-font-size-100, 13px);
+  color: var(--spectrum-gray-800);
   cursor: pointer;
+  transition:
+    border-color var(--form-motion-fast) var(--form-ease),
+    background-color var(--form-motion-fast) var(--form-ease),
+    color var(--form-motion-fast) var(--form-ease);
+}
+
+.form .form-field.checkbox-field label:hover,
+.form .form-field.radio-field label:hover {
+  border-color: var(--spectrum-gray-500);
+}
+
+.form .form-field.checkbox-field label:has(input:checked),
+.form .form-field.radio-field label:has(input:checked) {
+  border-color: var(--form-accent);
+  background: var(--form-accent-tint);
+  color: var(--form-accent-strong);
+  font-weight: 600;
+}
+
+/* The vestigial styling span is unused for chips. */
+.form .form-field.checkbox-field label > span,
+.form .form-field.radio-field label > span {
+  display: none;
 }
 
 .form .form-field.checkbox-field label input,
-.form .form-field.radio-field label input,
-.form .form-field.toggle-field label input {
-  position: absolute;
-  top: 50%;
-  left: 0;
-  transform: translateY(-50%);
+.form .form-field.radio-field label input {
+  position: static;
+  transform: none;
   margin: 0;
   width: 1em;
   height: 1em;
@@ -141,15 +285,6 @@
   cursor: default;
 }
 
-@media (width >= 600px) {
-  .form .form-field.checkbox-field,
-  .form .form-field.radio-field {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.25ch 1em;
-  }
-}
-
 .form .form-field.toggle-field label {
   position: relative;
   display: grid;
@@ -159,10 +294,18 @@
   min-height: 44px;
 }
 
+/* Toggle keeps its switch styling (input is the absolutely-positioned hit area). */
 .form .form-field.toggle-field label input {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  transform: translateY(-50%);
+  margin: 0;
   width: 2em;
-  opacity: 0;
+  height: 1em;
   border-radius: 50%;
+  opacity: 0;
+  cursor: pointer;
 }
 
 .form .form-field.toggle-field label span {
@@ -225,25 +368,67 @@
 
 /* ---- Multi-section form ---- */
 .form-card-multi {
-  max-width: 960px;
+  max-width: 980px;
+}
+
+/* Align the page heading/intro with the centered form card (one 980px column). */
+.section:has(.form) > .default-content,
+.section:has(.form) > .block-content {
+  max-width: 980px;
+}
+
+/* Header band: brand eyebrow + progress bar. */
+.form-multi .form-progress-header {
+  margin-bottom: var(--spectrum-spacing-400, 24px);
+}
+
+.form-multi .form-eyebrow {
+  display: inline-block;
+  margin-bottom: var(--spectrum-spacing-100, 10px);
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--form-brand-tint);
+  color: var(--form-brand-deep);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.form-multi .form-progress {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--spectrum-gray-100);
+  overflow: hidden;
+}
+
+.form-multi .form-progress-fill {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--form-brand-deep, #c30d00), var(--form-brand-bright, #fa0f00));
+  transition: width 0.5s var(--form-ease);
 }
 
 .form-multi .form-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 220px;
-  gap: var(--spectrum-spacing-400, 24px);
+  grid-template-columns: minmax(0, 1fr) 248px;
+  gap: var(--spectrum-spacing-500, 40px);
   align-items: start;
 }
 
 .form-multi .form-panel {
   min-width: 0;
+  max-width: 620px;
 }
 
 .form-multi .form-section-title {
   margin: 0 0 var(--spectrum-spacing-400, 24px);
-  font-size: var(--spectrum-font-size-300, 18px);
-  font-weight: 700;
-  line-height: 1.2;
+  font-size: var(--spectrum-font-size-400, 22px);
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
   color: var(--spectrum-gray-900);
 }
 
@@ -251,30 +436,59 @@
   display: none;
 }
 
+/* Active step fades + rises in on every Next/Previous/nav jump. The
+   is-entering class is re-applied (with a reflow) in activateSection so the
+   animation restarts reliably across browsers. */
+.form-multi .form-section.is-entering {
+  animation: form-fade-up var(--form-motion-base) var(--form-ease) both;
+}
+
+/* Conditional dependency fields ease in when their controller matches. */
+.form .form-field[data-controller]:not([aria-hidden='true']) {
+  animation: form-reveal 420ms var(--form-ease) both;
+}
+
 .form-multi .form-section-nav {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spectrum-spacing-75, 4px);
   position: sticky;
   top: var(--spectrum-spacing-400, 24px);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* Connecting vertical rail running behind the step dots. */
+.form-multi .form-section-nav::before {
+  content: '';
+  position: absolute;
+  left: 26px;
+  top: 28px;
+  bottom: 28px;
+  width: 2px;
+  background: var(--spectrum-gray-200);
+  z-index: 0;
 }
 
 .form-multi .form-section-nav-item,
 .form-multi .form-stepper-item {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   gap: var(--spectrum-spacing-200, 12px);
   width: 100%;
-  min-height: 36px;
+  min-height: 40px;
   padding: var(--spectrum-spacing-100, 8px) var(--spectrum-spacing-200, 12px);
   border: 1px solid transparent;
   border-radius: var(--spectrum-corner-radius-100);
   background: transparent;
-  color: var(--spectrum-gray-800);
+  color: var(--spectrum-gray-700);
   font-family: var(--spectrum-sans-font-family-stack);
   font-size: var(--spectrum-font-size-100);
   text-align: left;
   cursor: pointer;
+  transition:
+    background-color var(--form-motion-fast) var(--form-ease),
+    color var(--form-motion-fast) var(--form-ease);
 }
 
 .form-multi .form-section-nav-item:hover,
@@ -284,109 +498,77 @@
 
 .form-multi .form-section-nav-item[aria-current='step'],
 .form-multi .form-stepper-item[aria-current='step'] {
-  border-color: var(--spectrum-gray-200);
-  background: var(--spectrum-gray-100);
+  background: var(--form-accent-tint);
   font-weight: 700;
-  color: var(--spectrum-gray-900);
+  color: var(--form-accent-strong);
 }
 
-.form-multi .form-section-nav-icon {
+/* Numbered step dot. */
+.form-multi .form-section-nav-dot {
   display: inline-flex;
   flex-shrink: 0;
   align-items: center;
   justify-content: center;
-  width: 1.75rem;
-  height: 1.75rem;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
-  background: var(--spectrum-gray-100);
-  color: var(--spectrum-gray-700);
+  border: 2px solid var(--spectrum-gray-300);
+  background: var(--spectrum-gray-25);
+  color: var(--spectrum-gray-600);
+  font-size: 12px;
+  font-weight: 700;
+  transition:
+    background-color var(--form-motion-fast) var(--form-ease),
+    border-color var(--form-motion-fast) var(--form-ease),
+    color var(--form-motion-fast) var(--form-ease);
 }
 
-.form-multi .form-section-nav-icon-glyph {
-  color: inherit;
-}
-
-.form-multi .form-section-nav-icon[data-icon-index='0'] {
-  background: var(--spectrum-blue-100, #e0f2ff);
-  color: var(--spectrum-blue-800, #0265dc);
-}
-
-.form-multi .form-section-nav-icon[data-icon-index='1'] {
-  background: var(--spectrum-purple-100, #f3ebff);
-  color: var(--spectrum-purple-800, #6d28d9);
-}
-
-.form-multi .form-section-nav-icon[data-icon-index='2'] {
-  background: var(--spectrum-cyan-100, #d5fafa);
-  color: var(--spectrum-cyan-800, #00719f);
-}
-
-.form-multi .form-section-nav-icon[data-icon-index='3'] {
-  background: var(--spectrum-orange-100, #ffeccc);
-  color: var(--spectrum-orange-800, #bd6400);
-}
-
-.form-multi .form-section-nav-icon[data-icon-index='4'] {
-  background: var(--spectrum-magenta-100, #ffeaf2);
-  color: var(--spectrum-magenta-800, #b4006a);
-}
-
-.form-multi .form-section-nav-arrow {
-  display: none;
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: center;
-  width: 1.75rem;
-  height: 1.75rem;
-  border-radius: 50%;
-  border: 1px solid var(--spectrum-gray-300, #d5d5d5);
-  background: var(--spectrum-gray-200, #e6e6e6);
-  color: var(--spectrum-gray-800, #2c2c2c);
-  transform: rotate(180deg);
-}
-
-.form-multi .form-section-nav-arrow svg {
-  display: block;
-  width: 1rem;
-  height: 1rem;
+.form-multi .form-section-nav-num {
+  line-height: 1;
 }
 
 .form-multi .form-section-nav-check {
   display: none;
-  flex-shrink: 0;
   align-items: center;
   justify-content: center;
-  width: 1.75rem;
-  height: 1.75rem;
-  border-radius: 50%;
-  color: var(--spectrum-white);
+  line-height: 0;
+}
+
+.form-multi .form-section-nav-check svg {
+  display: block;
+}
+
+/* Active step — blue filled dot. */
+.form-multi .form-section-nav-item[aria-current='step'] .form-section-nav-dot,
+.form-multi .form-stepper-item[aria-current='step'] .form-section-nav-dot {
+  border-color: var(--form-accent);
+  background: var(--form-accent);
+  color: var(--spectrum-gray-25);
+}
+
+/* Completed step — green filled dot with a check. */
+.form-multi .form-section-nav-item.submitted .form-section-nav-dot,
+.form-multi .form-stepper-item.submitted .form-section-nav-dot {
+  border-color: var(--spectrum-green-800, #007a4d);
   background: var(--spectrum-green-800, #007a4d);
+  color: var(--spectrum-gray-25);
 }
 
-.form-multi .form-section-nav-item[aria-current='step']:not(.submitted) .form-section-nav-icon,
-.form-multi .form-stepper-item[aria-current='step']:not(.submitted) .form-section-nav-icon {
-  display: none;
-}
-
-.form-multi .form-section-nav-item[aria-current='step']:not(.submitted) .form-section-nav-arrow,
-.form-multi .form-stepper-item[aria-current='step']:not(.submitted) .form-section-nav-arrow {
-  display: inline-flex;
-}
-
-.form-multi .form-section-nav-label {
-  flex: 1;
-  min-width: 0;
-  line-height: 1.3;
-}
-
-.form-multi .form-section-nav-item.submitted .form-section-nav-icon,
-.form-multi .form-stepper-item.submitted .form-section-nav-icon {
+.form-multi .form-section-nav-item.submitted .form-section-nav-num,
+.form-multi .form-stepper-item.submitted .form-section-nav-num {
   display: none;
 }
 
 .form-multi .form-section-nav-item.submitted .form-section-nav-check,
 .form-multi .form-stepper-item.submitted .form-section-nav-check {
   display: inline-flex;
+  animation: form-pop-in var(--form-motion-base) var(--form-ease) both;
+}
+
+.form-multi .form-section-nav-label {
+  flex: 1;
+  min-width: 0;
+  line-height: 1.3;
 }
 
 .form-multi .form-stepper {
@@ -422,8 +604,14 @@
   margin-left: auto;
 }
 
+.form-multi .form-submit {
+  display: none;
+}
+
 .form-multi .form-submit:not([hidden]) {
+  display: inline-flex;
   margin-left: 0;
+  animation: form-fade-up var(--form-motion-base) var(--form-ease) both;
 }
 
 .form-multi .form-prev,
@@ -433,20 +621,39 @@
 .form-multi .form-reset-session,
 .form-toolbar .form-autofill,
 .form-toolbar .form-reset-session {
-  min-height: 36px;
-  padding: 0 var(--spectrum-spacing-300, 16px);
+  min-height: 40px;
+  padding: 0 var(--spectrum-spacing-300, 20px);
   border: var(--spectrum-border-width-100) solid var(--spectrum-gray-400);
-  border-radius: var(--spectrum-corner-radius-100);
+  border-radius: var(--form-radius-sm, 6px);
   background: var(--spectrum-gray-25);
   color: var(--spectrum-gray-800);
   font-family: var(--spectrum-sans-font-family-stack);
-  font-size: var(--spectrum-font-size-100);
+  font-size: var(--spectrum-font-size-200, 14px);
   font-weight: 600;
   cursor: pointer;
+  transition:
+    background-color var(--form-motion-fast) var(--form-ease),
+    border-color var(--form-motion-fast) var(--form-ease),
+    box-shadow var(--form-motion-fast) var(--form-ease),
+    transform var(--form-motion-fast) var(--form-ease);
+}
+
+/* Next is the primary per-step action — solid Spectrum blue. */
+.form-multi .form-next {
+  border-color: var(--form-accent-strong);
+  background: var(--form-accent);
+  color: var(--spectrum-gray-25);
+  box-shadow: 0 1px 2px rgb(2 101 220 / 30%);
+}
+
+.form-multi .form-next:hover {
+  border-color: var(--form-accent-strong);
+  background: var(--form-accent-hover);
+  box-shadow: 0 4px 12px -2px rgb(2 101 220 / 40%);
+  transform: translateY(-1px);
 }
 
 .form-multi .form-prev:hover,
-.form-multi .form-next:hover,
 .form-multi .form-save-share:hover,
 .form-multi .form-autofill:hover,
 .form-multi .form-reset-session:hover,
@@ -454,6 +661,17 @@
 .form-toolbar .form-reset-session:hover {
   border-color: var(--spectrum-gray-500);
   background: var(--spectrum-gray-75);
+  transform: translateY(-1px);
+}
+
+.form-multi .form-prev:active,
+.form-multi .form-next:active,
+.form-multi .form-save-share:active,
+.form-multi .form-autofill:active,
+.form-multi .form-reset-session:active,
+.form-toolbar .form-autofill:active,
+.form-toolbar .form-reset-session:active {
+  transform: translateY(0);
 }
 
 .form-toolbar {
@@ -499,6 +717,10 @@ main.site-content.form-share-open {
 }
 
 .form-share-modal {
+  --form-motion-fast: 160ms;
+  --form-motion-base: 220ms;
+  --form-ease: cubic-bezier(0.2, 0, 0, 1);
+
   position: fixed;
   inset: 0;
   z-index: 10001;
@@ -511,6 +733,14 @@ main.site-content.form-share-open {
 
 .form-share-modal[hidden] {
   display: none;
+}
+
+.form-share-modal:not([hidden]) {
+  animation: form-fade-up var(--form-motion-fast) var(--form-ease) both;
+}
+
+.form-share-modal:not([hidden]) .form-share-dialog {
+  animation: form-pop-in var(--form-motion-base) var(--form-ease) both;
 }
 
 .form-share-dialog {
@@ -573,4 +803,24 @@ main.site-content.form-share-open {
   color: var(--spectrum-blue-800);
   background: var(--spectrum-gray-75);
   outline: none;
+}
+
+/* Honor the OS "reduce motion" setting — instant, non-animated behavior. */
+@media (prefers-reduced-motion: reduce) {
+  .form *,
+  .form-share-modal,
+  .form-share-modal * {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .form-multi .form-prev:hover,
+  .form-multi .form-next:hover,
+  .form-multi .form-save-share:hover,
+  .form-multi .form-autofill:hover,
+  .form-multi .form-reset-session:hover,
+  .form-toolbar .form-autofill:hover,
+  .form-toolbar .form-reset-session:hover {
+    transform: none;
+  }
 }

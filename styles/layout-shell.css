@@ -29,7 +29,9 @@ body.layout-side-nav.has-breadcrumb {
 
 body.layout-side-nav > sp-theme {
   display: grid;
-  grid-template-columns: var(--sidenav-width) 1fr;
+
+  /* Side nav hidden site-wide (see header.css); content spans full width. */
+  grid-template-columns: 1fr;
   grid-template-rows: auto auto;
   min-height: 100dvh;
   height: auto;
@@ -50,7 +52,7 @@ body.layout-side-nav header.site-sidenav {
 }
 
 body.layout-side-nav main.site-content {
-  grid-column: 2;
+  grid-column: 1;
   grid-row: 1;
   overflow: visible;
   background-color: var(--content-bg);
@@ -58,7 +60,7 @@ body.layout-side-nav main.site-content {
 }
 
 body.layout-side-nav footer {
-  grid-column: 2;
+  grid-column: 1;
   grid-row: 2;
   background-color: var(--content-bg);
 }

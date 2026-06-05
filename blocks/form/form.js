@@ -6,7 +6,13 @@ import {
   resolveSpectrumColor,
   spectrumThemeDefaults,
 } from '../../scripts/utils/spectrum-theme.js';
-import { ensureFormNavIcons } from '../../deps/spectrum/dist/form-nav-icons.js';
+import {
+  areRequiredFieldsComplete,
+  getVisibleSectionControls,
+  isFieldHidden,
+  isRequiredFlag,
+  validateSection,
+} from './form-validation.js';
 
 /**
  * @param {string} tag
@@ -19,62 +25,26 @@ function createElement(tag, className) {
   return el;
 }
 
-const SECTION_NAV_ICON_COUNT = 5;
-
-const SECTION_NAV_ICON_TAGS = [
-  'sp-icon-document',
-  'sp-icon-user-group',
-  'sp-icon-cloud',
-  'sp-icon-star',
-  'sp-icon-flag',
-];
-
-const SECTION_NAV_ACTIVE_ARROW = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M14.78583,8.37811a.9915.9915,0,0,0-.21417-1.07794L9.94141,2.66992A.98885.98885,0,0,0,8.543,4.06836l2.94238,2.94238H1.87012a.98926.98926,0,0,0,0,1.97852h9.61523L8.543,11.93164a.98885.98885,0,1,0,1.39844,1.39844l4.63025-4.63025A.98831.98831,0,0,0,14.78583,8.37811Z"/></svg>`;
+const SECTION_NAV_CHECK_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M6.4 11.6 3 8.2l1.1-1.1 2.3 2.3 5-5L12.5 5.5z"/></svg>`;
 
 /**
- * @param {string} tag
- * @param {string} [className]
- * @param {{ size?: string, label?: string }} [attrs]
- * @returns {HTMLElement}
- */
-function createSpectrumIcon(tag, className, attrs = {}) {
-  const icon = document.createElement(tag);
-  if (className) icon.className = className;
-  icon.setAttribute('size', attrs.size || 's');
-  if (attrs.label) icon.setAttribute('label', attrs.label);
-  return icon;
-}
-
-/**
+ * Build a numbered step dot for the wizard nav. The number shows by default;
+ * CSS swaps in the checkmark once the step is submitted.
  * @param {number} index
  * @returns {HTMLSpanElement}
  */
-function buildSectionNavIcon(index) {
-  const iconIndex = index % SECTION_NAV_ICON_COUNT;
-  const wrapper = createElement('span', 'form-section-nav-icon');
-  wrapper.dataset.iconIndex = String(iconIndex);
-  wrapper.setAttribute('aria-hidden', 'true');
-  wrapper.append(createSpectrumIcon(SECTION_NAV_ICON_TAGS[iconIndex], 'form-section-nav-icon-glyph'));
-  return wrapper;
-}
+function buildSectionNavDot(index) {
+  const dot = createElement('span', 'form-section-nav-dot');
+  dot.setAttribute('aria-hidden', 'true');
 
-/**
- * @returns {HTMLSpanElement}
- */
-function buildSectionNavArrow() {
-  const arrow = createElement('span', 'form-section-nav-arrow');
-  arrow.setAttribute('aria-hidden', 'true');
-  arrow.innerHTML = SECTION_NAV_ACTIVE_ARROW;
-  return arrow;
-}
+  const num = createElement('span', 'form-section-nav-num');
+  num.textContent = String(index + 1);
 
-/**
- * @returns {HTMLElement}
- */
-function buildSectionNavCheck() {
-  const check = createSpectrumIcon('sp-icon-checkmark100', 'form-section-nav-check');
-  check.setAttribute('aria-hidden', 'true');
-  return check;
+  const check = createElement('span', 'form-section-nav-check');
+  check.innerHTML = SECTION_NAV_CHECK_SVG;
+
+  dot.append(num, check);
+  return dot;
 }
 
 /**
@@ -117,7 +87,40 @@ function normalizeField(raw) {
   if (!field.type || field.type === 'text') {
     field.type = inferInputType(field);
   }
+  if (isRequiredFlag(field.required)) field.required = 'true';
   return field;
+}
+
+/**
+ * Index the `dependencies` sheet by dependent field name, resolving each
+ * controller to its DOM input name (camelCase) and parsing expected values.
+ * @param {Array} dependencies
+ * @returns {Map<string, { controller: string, op: string, values: string[] }>}
+ */
+function indexDependencies(dependencies) {
+  const map = new Map();
+  (dependencies || []).forEach((rule) => {
+    if (!rule.field || !rule.controller) return;
+    map.set(rule.field, {
+      controller: generateId(rule.controller),
+      op: (rule.op || 'equals').toLowerCase(),
+      values: parseOptions(rule.value),
+    });
+  });
+  return map;
+}
+
+/**
+ * Stamp dependency metadata onto a built field element so the conditional
+ * engine can show/hide it from its controller's value.
+ * @param {HTMLElement} el
+ * @param {{ controller: string, op: string, values: string[] }|null} [dependency]
+ */
+function applyDependencyDataset(el, dependency) {
+  if (!dependency) return;
+  el.dataset.controller = dependency.controller;
+  el.dataset.dependencyOp = dependency.op;
+  el.dataset.dependencyValues = JSON.stringify(dependency.values);
 }
 
 /**
@@ -154,51 +157,6 @@ function groupBySection(fields) {
 }
 
 /**
- * @param {HTMLElement} el
- * @returns {boolean}
- */
-function isFieldHidden(el) {
-  const field = el.closest('.form-field');
-  return field?.getAttribute('aria-hidden') === 'true';
-}
-
-/**
- * @param {HTMLElement} sectionEl
- * @returns {HTMLElement[]}
- */
-function getVisibleSectionControls(sectionEl) {
-  return [...sectionEl.querySelectorAll('input, textarea, select')].filter((el) => {
-    if (el.type === 'submit' || el.disabled) return false;
-    return !isFieldHidden(el);
-  });
-}
-
-/**
- * @param {HTMLElement} sectionEl
- * @returns {boolean}
- */
-function validateMultiselectGroups(sectionEl) {
-  let valid = true;
-  sectionEl.querySelectorAll('.multiselect-field[data-required="true"]').forEach((fieldset) => {
-    const checked = fieldset.querySelector('input:checked');
-    fieldset.classList.toggle('invalid', !checked);
-    if (!checked) valid = false;
-  });
-  return valid;
-}
-
-/**
- * @param {HTMLElement} sectionEl
- * @returns {boolean}
- */
-function validateSection(sectionEl) {
-  const controls = getVisibleSectionControls(sectionEl);
-  let valid = controls.every((el) => el.checkValidity());
-  if (!validateMultiselectGroups(sectionEl)) valid = false;
-  return valid;
-}
-
-/**
  * @param {HTMLFormElement} form
  * @returns {Set<number>}
  */
@@ -230,14 +188,6 @@ function restoreSubmittedSections(form, activeSection) {
   for (let i = 0; i < activeSection; i += 1) {
     markSectionSubmitted(form, i);
   }
-}
-
-/**
- * @param {HTMLElement} sectionEl
- * @returns {boolean}
- */
-function isSectionComplete(sectionEl) {
-  return validateSection(sectionEl);
 }
 
 /**
@@ -314,7 +264,7 @@ function buildInput(field) {
   input.type = type || 'text';
   input.id = generateId(fieldName);
   input.name = input.id;
-  input.required = required === 'true';
+  input.required = isRequiredFlag(required);
   if (defaultValue) input.value = defaultValue;
   if (placeholder) input.placeholder = placeholder;
   return input;
@@ -332,7 +282,7 @@ function buildTextArea(field) {
   const textarea = createElement('textarea');
   textarea.id = generateId(fieldName);
   textarea.name = textarea.id;
-  textarea.required = required === 'true';
+  textarea.required = isRequiredFlag(required);
   textarea.rows = 5;
   if (defaultValue) textarea.value = defaultValue;
   if (placeholder) textarea.placeholder = placeholder;
@@ -356,35 +306,31 @@ function buildOptionInput(field, option) {
   input.name = generateId(fieldName);
   input.value = option;
   input.checked = option === defaultValue;
-  input.required = required === 'true';
+  input.required = isRequiredFlag(required);
 
   return input;
 }
 
 /**
  * @param {Object} field
- * @param {string|null} controlled
+ * @param {{ controller: string, op: string, values: string[] }|null} [dependency]
  * @returns {HTMLFieldSetElement|null}
  */
-function buildOptions(field, controlled) {
+function buildOptions(field, dependency) {
   const {
     type, options, label, required,
   } = field;
   if (!options) return null;
 
   const fieldset = createElement('fieldset', `form-field ${type}-field`);
-  if (controlled) {
-    const controller = controlled.split('-')[0];
-    fieldset.dataset.controller = controller;
-    fieldset.dataset.condition = controlled;
-  }
-  fieldset.append(buildLabel(label, 'legend', null, required === 'true'));
+  applyDependencyDataset(fieldset, dependency);
+  fieldset.append(buildLabel(label, 'legend', null, isRequiredFlag(required)));
 
   const inputType = type === 'multiselect' ? 'checkbox' : type;
   if (type === 'multiselect') {
     fieldset.classList.remove(`${type}-field`);
     fieldset.classList.add('multiselect-field', 'checkbox-field');
-    if (required === 'true') fieldset.dataset.required = 'true';
+    if (isRequiredFlag(required)) fieldset.dataset.required = 'true';
   }
 
   parseOptions(options).forEach((option) => {
@@ -404,27 +350,23 @@ function buildOptions(field, controlled) {
 
 /**
  * @param {Object} field
- * @param {string|null} controlled
+ * @param {{ controller: string, op: string, values: string[] }|null} [dependency]
  * @returns {HTMLElement|null}
  */
-function buildSelect(field, controlled) {
+function buildSelect(field, dependency) {
   const {
     type, options, field: fieldName, label, required, placeholder,
   } = field;
   if (!options) return null;
 
   const wrapper = createElement('div', `form-field ${type}-field`);
-  if (controlled) {
-    const controller = controlled.split('-')[0];
-    wrapper.dataset.controller = controller;
-    wrapper.dataset.condition = controlled;
-  }
-  wrapper.append(buildLabel(label, 'label', generateId(fieldName), required === 'true'));
+  applyDependencyDataset(wrapper, dependency);
+  wrapper.append(buildLabel(label, 'label', generateId(fieldName), isRequiredFlag(required)));
 
   const select = createElement('select');
   select.id = generateId(fieldName);
   select.name = select.id;
-  select.required = required === 'true';
+  select.required = isRequiredFlag(required);
   wrapper.append(select);
 
   if (placeholder) {
@@ -448,20 +390,16 @@ function buildSelect(field, controlled) {
 
 /**
  * @param {Object} field
- * @param {string|null} controlled
+ * @param {{ controller: string, op: string, values: string[] }|null} [dependency]
  * @returns {HTMLElement}
  */
-function buildToggle(field, controlled) {
+function buildToggle(field, dependency) {
   const {
     label, required, default: defaultValue,
   } = field;
 
   const wrapper = createElement('div', 'form-field toggle-field');
-  if (controlled) {
-    const controller = controlled.split('-')[0];
-    wrapper.dataset.controller = controller;
-    wrapper.dataset.condition = controlled;
-  }
+  applyDependencyDataset(wrapper, dependency);
 
   const input = buildOptionInput({ ...field, type: 'checkbox' }, defaultValue || 'true');
   input.setAttribute('role', 'switch');
@@ -472,7 +410,7 @@ function buildToggle(field, controlled) {
   });
 
   const span = createElement('span');
-  const labelEl = buildLabel(label, 'label', input.id, required === 'true');
+  const labelEl = buildLabel(label, 'label', input.id, isRequiredFlag(required));
   labelEl.prepend(input, span);
   wrapper.append(labelEl);
 
@@ -493,86 +431,69 @@ function buildButton(field) {
 }
 
 /**
- * @param {Event} e
- * @param {Map<string, HTMLElement[]>} controllerConfig
+ * Read the current value(s) of a controller field by its input name.
+ * Checkbox/radio groups return the set of checked values; other controls
+ * return their single value (empty array when unset).
+ * @param {HTMLFormElement} form
+ * @param {string} controller
+ * @returns {string[]}
  */
-function toggleConditional(e, controllerConfig) {
-  const { target } = e;
-  const controller = target.name;
-  if (controllerConfig.has(controller)) {
-    const inputs = [...controllerConfig.get(controller)];
-    inputs.forEach((i) => {
-      const field = i.closest('.form-field');
-      const { condition } = field.dataset;
-      const conditionMet = condition.includes(toClassName(target.value));
-      field.setAttribute('aria-hidden', !conditionMet);
-
-      if (conditionMet) {
-        if (i.dataset.originalRequired === 'true') {
-          i.setAttribute('required', '');
-        }
-        i.removeAttribute('tabindex');
-      } else {
-        i.removeAttribute('required');
-        i.setAttribute('tabindex', '-1');
-      }
-    });
+function getControllerValues(form, controller) {
+  const nodes = [...form.querySelectorAll(`[name="${controller}"]`)];
+  if (!nodes.length) return [];
+  const [first] = nodes;
+  if (first.type === 'checkbox' || first.type === 'radio') {
+    return nodes.filter((node) => node.checked).map((node) => node.value);
   }
+  return first.value ? [first.value] : [];
 }
 
 /**
- * @param {HTMLFormElement} form
- * @param {Map<string, HTMLElement[]>} controllerConfig
+ * Evaluate a dependency rule against the controller's current value(s).
+ * @param {string[]} values
+ * @param {string} op
+ * @param {string[]} expected
+ * @returns {boolean}
  */
-function initConditionals(form, controllerConfig) {
-  controllerConfig.forEach((controlledInputs, controller) => {
-    let controllerValue = null;
-    const checked = form.querySelector(`[name="${controller}"]:checked`);
-    const select = form.querySelector(`select[name="${controller}"]`);
+function dependencyMet(values, op, expected) {
+  const have = values.map((value) => toClassName(value));
+  const want = expected.map((value) => toClassName(value));
+  if (op === 'equals') {
+    return have.length === 1 && want.includes(have[0]);
+  }
+  // 'includes' (a multiselect contains the value) and 'in' (the value is one
+  // of a set) are both satisfied by a non-empty intersection.
+  return want.some((value) => have.includes(value));
+}
 
-    if (checked) {
-      controllerValue = checked.value;
-    } else if (select) {
-      controllerValue = select.value;
+/**
+ * Show or hide a controlled field based on its dependency rule, toggling the
+ * `required` attribute so hidden fields never block validation.
+ * @param {HTMLFormElement} form
+ * @param {HTMLElement} fieldEl
+ */
+function applyConditionalState(form, fieldEl) {
+  const { controller, dependencyOp } = fieldEl.dataset;
+  let expected = [];
+  try {
+    expected = JSON.parse(fieldEl.dataset.dependencyValues || '[]');
+  } catch {
+    expected = [];
+  }
+
+  const met = dependencyMet(getControllerValues(form, controller), dependencyOp, expected);
+  fieldEl.setAttribute('aria-hidden', String(!met));
+
+  fieldEl.querySelectorAll('input, textarea, select').forEach((input) => {
+    if (input.hasAttribute('required') && !input.dataset.originalRequired) {
+      input.dataset.originalRequired = 'true';
     }
-
-    if (controllerValue) {
-      controlledInputs.forEach((input) => {
-        const field = input.closest('.form-field');
-        const { condition } = field.dataset;
-        const conditionMet = condition.includes(toClassName(controllerValue));
-        field.setAttribute('aria-hidden', !conditionMet);
-
-        if (input.hasAttribute('required')) {
-          if (!input.dataset.originalRequired) {
-            input.dataset.originalRequired = 'true';
-          }
-
-          if (!conditionMet) {
-            input.removeAttribute('required');
-          }
-        }
-
-        if (conditionMet) {
-          input.removeAttribute('tabindex');
-        } else {
-          input.setAttribute('tabindex', '-1');
-        }
-      });
+    if (met) {
+      if (input.dataset.originalRequired === 'true') input.setAttribute('required', '');
+      input.removeAttribute('tabindex');
     } else {
-      controlledInputs.forEach((input) => {
-        const field = input.closest('.form-field');
-        field.setAttribute('aria-hidden', true);
-
-        if (input.hasAttribute('required')) {
-          if (!input.dataset.originalRequired) {
-            input.dataset.originalRequired = 'true';
-          }
-          input.removeAttribute('required');
-        }
-
-        input.setAttribute('tabindex', '-1');
-      });
+      input.removeAttribute('required');
+      input.setAttribute('tabindex', '-1');
     }
   });
 }
@@ -582,36 +503,28 @@ function initConditionals(form, controllerConfig) {
  */
 function enableConditionals(form) {
   const controlled = [...form.querySelectorAll('[data-controller]')];
-  const controllerConfig = new Map();
+  if (!controlled.length) return;
 
-  controlled.forEach((c) => {
-    const input = c.querySelector('input, textarea, select');
-    const { controller } = c.dataset;
+  controlled.forEach((fieldEl) => {
+    const input = fieldEl.querySelector('input, textarea, select');
+    const { controller } = fieldEl.dataset;
 
-    if (!controllerConfig.has(controller)) controllerConfig.set(controller, []);
-    controllerConfig.get(controller).push(input);
-
-    if (input && input.id) {
-      const controllerInputs = form.querySelectorAll(`[name="${controller}"]`);
-
-      controllerInputs.forEach((controllerInput) => {
-        const existingControls = controllerInput.getAttribute('aria-controls') || '';
-        const controlsArray = existingControls.split(' ').filter((ec) => ec);
-
-        if (!controlsArray.includes(input.id)) {
-          controlsArray.push(input.id);
-        }
-
-        controllerInput.setAttribute('aria-controls', controlsArray.join(' '));
+    if (input?.id) {
+      form.querySelectorAll(`[name="${controller}"]`).forEach((controllerInput) => {
+        const controls = (controllerInput.getAttribute('aria-controls') || '')
+          .split(' ')
+          .filter(Boolean);
+        if (!controls.includes(input.id)) controls.push(input.id);
+        controllerInput.setAttribute('aria-controls', controls.join(' '));
         input.setAttribute('aria-controlledby', controllerInput.id);
       });
     }
+
+    applyConditionalState(form, fieldEl);
   });
 
-  initConditionals(form, controllerConfig);
-
-  form.addEventListener('change', (e) => {
-    toggleConditional(e, controllerConfig);
+  form.addEventListener('change', () => {
+    controlled.forEach((fieldEl) => applyConditionalState(form, fieldEl));
   });
 }
 
@@ -974,8 +887,8 @@ function shouldShowDevTools() {
   const params = new URLSearchParams(window.location.search);
   if (params.get('autofill') === '1' || readResetFromUrl()) return true;
   const { hostname } = window.location;
-  if (hostname === 'localhost' || hostname.endsWith('.local')) return true;
-  return hostname.endsWith('.aem.page');
+  // Local dev only — never auto-show on aem.page (preview) or aem.live (prod).
+  return hostname === 'localhost' || hostname.endsWith('.local');
 }
 
 /**
@@ -1462,16 +1375,15 @@ function enableDeferredSubmission(form) {
  */
 function buildField(field) {
   const {
-    type, label, help, field: fieldName, conditional,
+    type, label, help, field: fieldName, dependency = null,
   } = field;
-  const controlled = conditional || null;
 
   if (type === 'submit' || type === 'reset') {
     return buildButton(field);
   }
 
   if (type === 'radio' || type === 'checkbox' || type === 'multiselect') {
-    const fieldset = buildOptions(field, controlled);
+    const fieldset = buildOptions(field, dependency);
     if (help) {
       const helpText = writeHelpText(help, generateId(fieldName));
       fieldset.append(helpText);
@@ -1480,7 +1392,7 @@ function buildField(field) {
   }
 
   if (type === 'toggle') {
-    const toggle = buildToggle(field, controlled);
+    const toggle = buildToggle(field, dependency);
     if (help) {
       const helpText = writeHelpText(help, generateId(fieldName));
       toggle.append(helpText);
@@ -1489,7 +1401,7 @@ function buildField(field) {
   }
 
   if (type === 'select') {
-    const select = buildSelect(field, controlled);
+    const select = buildSelect(field, dependency);
     if (help) {
       const helpText = writeHelpText(help, generateId(fieldName));
       select.append(helpText);
@@ -1498,13 +1410,9 @@ function buildField(field) {
   }
 
   const wrapper = createElement('div', `form-field ${type}-field`);
-  if (controlled) {
-    const controller = controlled.split('-')[0];
-    wrapper.dataset.controller = controller;
-    wrapper.dataset.condition = controlled;
-  }
+  applyDependencyDataset(wrapper, dependency);
   const inputId = generateId(fieldName);
-  wrapper.append(buildLabel(label, 'label', inputId, field.required === 'true'));
+  wrapper.append(buildLabel(label, 'label', inputId, isRequiredFlag(field.required)));
 
   let helpText;
   if (help) {
@@ -1539,7 +1447,14 @@ function activateSection(form, index, sectionEls, navItems, stepperItems) {
     const active = i === clamped;
     section.hidden = !active;
     section.setAttribute('aria-hidden', active ? 'false' : 'true');
+    section.classList.remove('is-entering');
   });
+  const activeSection = sectionEls[clamped];
+  if (activeSection) {
+    // Force a reflow so the animation reliably restarts on every step change.
+    activeSection.getBoundingClientRect();
+    activeSection.classList.add('is-entering');
+  }
   navItems.forEach((item, i) => {
     item.setAttribute('aria-current', i === clamped ? 'step' : 'false');
   });
@@ -1547,6 +1462,15 @@ function activateSection(form, index, sectionEls, navItems, stepperItems) {
     item.setAttribute('aria-current', i === clamped ? 'step' : 'false');
   });
   form.dataset.activeSection = String(clamped);
+
+  const total = sectionEls.length;
+  const eyebrow = form.querySelector('.form-eyebrow');
+  if (eyebrow) eyebrow.textContent = `Step ${clamped + 1} of ${total}`;
+  const progress = form.querySelector('.form-progress');
+  const progressFill = form.querySelector('.form-progress-fill');
+  if (progress) progress.setAttribute('aria-valuenow', String(clamped + 1));
+  if (progressFill) progressFill.style.width = `${((clamped + 1) / total) * 100}%`;
+
   navItems[clamped]?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   stepperItems[clamped]?.scrollIntoView({ inline: 'nearest', behavior: 'smooth' });
   return clamped;
@@ -1573,16 +1497,23 @@ function updateSectionNavState(form, sectionEls, navItems, stepperItems) {
 
   const submitBtn = form.querySelector('.form-submit');
   if (submitBtn) {
-    const allValid = sectionEls.every((sectionEl) => isSectionComplete(sectionEl));
-    submitBtn.hidden = !allValid;
-    submitBtn.toggleAttribute('disabled', !allValid);
+    const allRequiredComplete = sectionEls.every(
+      (sectionEl) => areRequiredFieldsComplete(sectionEl),
+    );
+    submitBtn.hidden = !allRequiredComplete;
+    submitBtn.toggleAttribute('hidden', !allRequiredComplete);
+    submitBtn.toggleAttribute('disabled', !allRequiredComplete);
   }
 
   const activeIndex = Number(form.dataset.activeSection || 0);
   const prevBtn = form.querySelector('.form-prev');
   const nextBtn = form.querySelector('.form-next');
   if (prevBtn) prevBtn.disabled = activeIndex === 0;
-  if (nextBtn) nextBtn.hidden = activeIndex >= sectionEls.length - 1;
+  if (nextBtn) {
+    const hideNext = activeIndex >= sectionEls.length - 1;
+    nextBtn.hidden = hideNext;
+    nextBtn.toggleAttribute('hidden', hideNext);
+  }
 }
 
 /**
@@ -1594,10 +1525,21 @@ function updateSectionNavState(form, sectionEls, navItems, stepperItems) {
  */
 function buildMultiSectionForm(fields, submit, sections) {
   initSpectrum();
-  ensureFormNavIcons();
   const form = createElement('form');
   form.className = 'form-multi';
   form.setAttribute('novalidate', '');
+
+  const progressHeader = createElement('div', 'form-progress-header');
+  const eyebrow = createElement('span', 'form-eyebrow');
+  eyebrow.textContent = `Step 1 of ${sections.length}`;
+  const progress = createElement('div', 'form-progress');
+  progress.setAttribute('role', 'progressbar');
+  progress.setAttribute('aria-valuemin', '1');
+  progress.setAttribute('aria-valuemax', String(sections.length));
+  const progressFill = createElement('span', 'form-progress-fill');
+  progress.append(progressFill);
+  progressHeader.append(eyebrow, progress);
+  form.append(progressHeader);
 
   const layout = createElement('div', 'form-layout');
   const stepper = createElement('div', 'form-stepper');
@@ -1639,13 +1581,11 @@ function buildMultiSectionForm(fields, submit, sections) {
     navItem.setAttribute('role', 'tab');
     navItem.setAttribute('aria-controls', sectionEl.id);
 
-    const navIcon = buildSectionNavIcon(index);
-    const navArrow = buildSectionNavArrow();
+    const navDot = buildSectionNavDot(index);
     const navLabel = createElement('span', 'form-section-nav-label');
     navLabel.textContent = section.label;
-    const navCheck = buildSectionNavCheck();
 
-    navItem.append(navIcon, navArrow, navCheck, navLabel);
+    navItem.append(navDot, navLabel);
     navItems.push(navItem);
     nav.append(navItem);
 
@@ -1673,6 +1613,7 @@ function buildMultiSectionForm(fields, submit, sections) {
   submitBtn.setAttribute('type', 'submit');
   submitBtn.textContent = submitField?.field || submitField?.label || 'Submit';
   submitBtn.hidden = true;
+  submitBtn.toggleAttribute('hidden', true);
 
   const saveShareBtn = createElement('button', 'form-save-share');
   saveShareBtn.type = 'button';
@@ -1840,10 +1781,17 @@ function buildFlatForm(fields, submit) {
 /**
  * @param {Array} fields
  * @param {string|undefined} submit
+ * @param {Array} [dependencies]
  * @returns {HTMLFormElement}
  */
-function buildForm(fields, submit) {
-  const normalized = fields.map(normalizeField);
+function buildForm(fields, submit, dependencies) {
+  const depMap = indexDependencies(dependencies);
+  const normalized = fields.map((raw) => {
+    const field = normalizeField(raw);
+    const dependency = depMap.get(field.field);
+    if (dependency) field.dependency = dependency;
+    return field;
+  });
   if (hasSections(normalized)) {
     const sections = groupBySection(normalized);
     if (sections.length) {
@@ -1909,6 +1857,38 @@ function resolveFormEndpoints(block) {
 }
 
 /**
+ * Extract the field rows from an AEM sheet response, supporting both
+ * single-sheet (`{ data: [...] }`) and multi-sheet (`{ sheetName: { data: [...] } }`)
+ * workbook formats.
+ * @param {Object} json
+ * @returns {Array|null}
+ */
+function extractFormData(json) {
+  if (!json || typeof json !== 'object') return null;
+  if (Array.isArray(json.data)) return json.data;
+  const names = Array.isArray(json[':names']) ? json[':names'] : Object.keys(json);
+  for (let i = 0; i < names.length; i += 1) {
+    const name = names[i];
+    if (name !== 'dependencies') {
+      const sheet = json[name];
+      if (sheet && Array.isArray(sheet.data)) return sheet.data;
+    }
+  }
+  return null;
+}
+
+/**
+ * Extract conditional dependency rows from a multi-sheet workbook, if present.
+ * @param {Object} json
+ * @returns {Array}
+ */
+function extractDependencies(json) {
+  if (!json || typeof json !== 'object') return [];
+  const sheet = json.dependencies;
+  return sheet && Array.isArray(sheet.data) ? sheet.data : [];
+}
+
+/**
  * @param {HTMLElement} block
  */
 export default function init(block) {
@@ -1922,10 +1902,12 @@ export default function init(block) {
           try {
             const resp = await fetch(new URL(source, window.location.origin));
             if (!resp.ok) throw new Error(`${resp.status}: ${resp.statusText}`);
-            const { data } = await resp.json();
+            const json = await resp.json();
+            const data = extractFormData(json);
             if (!data) throw new Error(`No form fields at ${source}`);
+            const dependencies = extractDependencies(json);
             activeAutofillOverrides = await loadAutofillOverrides(source);
-            const form = buildForm(data, submit);
+            const form = buildForm(data, submit, dependencies);
             if (shareRestore) form.dataset.shareRestore = shareRestore;
             if (readResetFromUrl()) {
               form.__resetSession?.();

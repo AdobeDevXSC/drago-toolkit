@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Form restyle prototype</title>
+<style>
+  /* --- Spectrum-ish tokens (local so the proto renders standalone) --- */
+  :root {
+    --spectrum-gray-25: #fff;
+    --spectrum-gray-50: #fafafa;
+    --spectrum-gray-75: #f4f4f4;
+    --spectrum-gray-100: #eaeaea;
+    --spectrum-gray-200: #e1e1e1;
+    --spectrum-gray-300: #cacaca;
+    --spectrum-gray-400: #b3b3b3;
+    --spectrum-gray-500: #8f8f8f;
+    --spectrum-gray-600: #6d6d6d;
+    --spectrum-gray-700: #4b4b4b;
+    --spectrum-gray-800: #2c2c2c;
+    --spectrum-gray-900: #1a1a1a;
+    --spectrum-blue-100: #e0f2ff;
+    --spectrum-blue-400: #62a8ff;
+    --spectrum-blue-700: #1473e6;
+    --spectrum-blue-800: #0265dc;
+    --spectrum-blue-900: #095aba;
+    --spectrum-green-100: #e3f6ec;
+    --spectrum-green-800: #007a4d;
+    --spectrum-red-800: #d31510;
+    --sans: 'Adobe Clean', -apple-system, system-ui, 'Segoe UI', roboto, sans-serif;
+
+    /* Adobe brand red */
+    --adobe-red: #eb1000;
+    --adobe-red-bright: #fa0f00;
+    --adobe-red-deep: #c30d00;
+    --adobe-red-tint: #fdecea;
+
+    /* prototype design tokens */
+    --p-radius-lg: 14px;
+    --p-radius-md: 8px;
+    --p-radius-sm: 6px;
+    --p-accent: var(--adobe-red);
+    --p-accent-strong: var(--adobe-red-deep);
+    --p-accent-tint: var(--adobe-red-tint);
+    --p-shadow-card: 0 1px 2px rgb(0 0 0 / 4%), 0 12px 32px -12px rgb(0 0 0 / 18%);
+    --p-shadow-focus: 0 0 0 3px rgb(235 16 0 / 20%);
+    --p-ease: cubic-bezier(0.2, 0, 0, 1);
+    --p-field-h: 40px;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    padding: 48px 24px;
+    background:
+      radial-gradient(1200px 600px at 50% -10%, #fbeeec 0%, transparent 60%),
+      var(--spectrum-gray-75);
+    font-family: var(--sans);
+    color: var(--spectrum-gray-800);
+  }
+
+  /* ---------------- Card shell ---------------- */
+  .form-card {
+    max-width: 980px;
+    margin: 0 auto;
+    background: var(--spectrum-gray-25);
+    border: 1px solid var(--spectrum-gray-200);
+    border-radius: var(--p-radius-lg);
+    box-shadow: var(--p-shadow-card);
+    overflow: hidden;
+  }
+
+  /* accent bar across the very top */
+  .form-card::before {
+    content: '';
+    display: block;
+    height: 4px;
+    background: linear-gradient(90deg, var(--adobe-red-deep), var(--adobe-red-bright));
+  }
+
+  .form-inner { padding: 36px 40px 40px; }
+
+  /* ---------------- Header zone ---------------- */
+  .form-head { margin-bottom: 28px; }
+
+  .form-eyebrow {
+    display: inline-block;
+    margin-bottom: 10px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    background: var(--p-accent-tint);
+    color: var(--adobe-red-deep);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .form-title {
+    margin: 0 0 6px;
+    font-size: 26px;
+    font-weight: 800;
+    line-height: 1.15;
+    color: var(--spectrum-gray-900);
+    letter-spacing: -0.01em;
+  }
+
+  .form-subtitle {
+    margin: 0;
+    font-size: 14px;
+    color: var(--spectrum-gray-700);
+    line-height: 1.5;
+  }
+
+  /* slim progress bar */
+  .form-progress {
+    margin-top: 20px;
+    height: 6px;
+    border-radius: 999px;
+    background: var(--spectrum-gray-100);
+    overflow: hidden;
+  }
+  .form-progress > span {
+    display: block;
+    height: 100%;
+    width: 33%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, var(--adobe-red-deep), var(--adobe-red-bright));
+    transition: width 0.5s var(--p-ease);
+  }
+
+  /* ---------------- Layout ---------------- */
+  .form-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 248px;
+    gap: 40px;
+    align-items: start;
+  }
+  .form-panel { min-width: 0; max-width: 620px; }
+
+  /* ---------------- Fields ---------------- */
+  .form-field + .form-field { margin-top: 20px; }
+
+  .form-field > label,
+  .form-field > legend {
+    display: block;
+    margin-bottom: 7px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--spectrum-gray-900);
+  }
+  label[data-required]::after,
+  legend[data-required]::after {
+    content: '*';
+    margin-left: 0.3ch;
+    color: var(--spectrum-red-800);
+  }
+
+  .form-field input[type='text'],
+  .form-field input[type='date'],
+  .form-field textarea,
+  .form-field select {
+    width: 100%;
+    min-height: var(--p-field-h);
+    padding: 9px 13px;
+    border: 1.5px solid var(--spectrum-gray-300);
+    border-radius: var(--p-radius-sm);
+    background: var(--spectrum-gray-25);
+    color: var(--spectrum-gray-900);
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.4;
+    transition: border-color 0.16s var(--p-ease), box-shadow 0.16s var(--p-ease);
+  }
+  .form-field textarea { min-height: 96px; resize: vertical; }
+
+  .form-field input:hover,
+  .form-field textarea:hover,
+  .form-field select:hover { border-color: var(--spectrum-gray-500); }
+
+  .form-field input:focus,
+  .form-field textarea:focus,
+  .form-field select:focus {
+    outline: none;
+    border-color: var(--p-accent);
+    box-shadow: var(--p-shadow-focus);
+  }
+
+  .field-help-text {
+    margin: 6px 0 0;
+    font-size: 12px;
+    color: var(--spectrum-gray-700);
+    line-height: 1.45;
+  }
+
+  fieldset { margin: 0; border: 0; padding: 0; }
+
+  /* checkbox / multiselect as soft chips */
+  .checkbox-field .options { display: flex; flex-wrap: wrap; gap: 10px; }
+  .checkbox-field .opt {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 14px;
+    border: 1.5px solid var(--spectrum-gray-300);
+    border-radius: 999px;
+    font-size: 13px;
+    color: var(--spectrum-gray-800);
+    cursor: pointer;
+    transition: border-color 0.16s var(--p-ease), background 0.16s var(--p-ease);
+  }
+  .checkbox-field .opt:hover { border-color: var(--spectrum-gray-500); }
+  .checkbox-field .opt:has(input:checked) {
+    border-color: var(--p-accent);
+    background: var(--p-accent-tint);
+    color: var(--adobe-red-deep);
+    font-weight: 600;
+  }
+
+  /* conditional reveal */
+  @keyframes reveal {
+    from { opacity: 0; transform: translateY(16px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .form-field.is-dependent {
+    animation: reveal 420ms var(--p-ease) both;
+    border-left: 2px solid var(--p-accent);
+    padding-left: 14px;
+    margin-left: -16px;
+  }
+
+  /* ---------------- Sidebar wizard nav ---------------- */
+  .form-section-nav {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding-left: 4px;
+  }
+  /* vertical rail */
+  .form-section-nav::before {
+    content: '';
+    position: absolute;
+    left: 21px;
+    top: 22px;
+    bottom: 22px;
+    width: 2px;
+    background: var(--spectrum-gray-200);
+  }
+
+  .nav-item {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    border: 1px solid transparent;
+    border-radius: var(--p-radius-md);
+    background: transparent;
+    color: var(--spectrum-gray-700);
+    font: inherit;
+    font-size: 13.5px;
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.16s var(--p-ease), color 0.16s var(--p-ease);
+  }
+  .nav-item:hover { background: var(--spectrum-gray-75); }
+
+  .nav-dot {
+    position: relative;
+    z-index: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px; height: 28px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    background: var(--spectrum-gray-25);
+    border: 2px solid var(--spectrum-gray-300);
+    color: var(--spectrum-gray-600);
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .nav-item[aria-current='step'] {
+    background: var(--p-accent-tint);
+    color: var(--adobe-red-deep);
+    font-weight: 700;
+  }
+  .nav-item[aria-current='step'] .nav-dot {
+    border-color: var(--p-accent);
+    background: var(--p-accent);
+    color: #fff;
+  }
+
+  .nav-item.done { color: var(--spectrum-gray-800); }
+  .nav-item.done .nav-dot {
+    border-color: var(--spectrum-green-800);
+    background: var(--spectrum-green-800);
+    color: #fff;
+  }
+
+  /* ---------------- Footer / buttons ---------------- */
+  .form-footer {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 32px;
+    padding-top: 22px;
+    border-top: 1px solid var(--spectrum-gray-200);
+  }
+  .btn {
+    min-height: 40px;
+    padding: 0 20px;
+    border-radius: var(--p-radius-sm);
+    font: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 0.16s var(--p-ease), background 0.16s var(--p-ease), border-color 0.16s var(--p-ease), box-shadow 0.16s var(--p-ease);
+  }
+  .btn:hover { transform: translateY(-1px); }
+  .btn:active { transform: translateY(0); }
+
+  .btn-primary {
+    border: 1px solid var(--p-accent-strong);
+    background: var(--p-accent);
+    color: #fff;
+    box-shadow: 0 1px 2px rgb(235 16 0 / 30%);
+  }
+  .btn-primary:hover { background: var(--adobe-red-bright); box-shadow: 0 4px 12px -2px rgb(235 16 0 / 40%); }
+
+  .btn-quiet {
+    border: 1px solid var(--spectrum-gray-400);
+    background: var(--spectrum-gray-25);
+    color: var(--spectrum-gray-800);
+  }
+  .btn-quiet:hover { border-color: var(--spectrum-gray-500); background: var(--spectrum-gray-75); }
+
+  .spacer { flex: 1; }
+
+  @media (width < 820px) {
+    .form-layout { grid-template-columns: 1fr; }
+    .form-inner { padding: 24px 20px 28px; }
+  }
+</style>
+</head>
+<body>
+  <div class="form-card">
+    <div class="form-inner">
+      <div class="form-head">
+        <span class="form-eyebrow">Step 2 of 6</span>
+        <h1 class="form-title">M2C Opportunity context</h1>
+        <p class="form-subtitle">Tell us about the deal so we can prioritize and route it to the right team.</p>
+        <div class="form-progress"><span style="width:33%"></span></div>
+      </div>
+
+      <div class="form-layout">
+        <!-- panel -->
+        <div class="form-panel">
+          <div class="form-field">
+            <label for="dr" data-required>DR Number</label>
+            <input id="dr" type="text" value="DR-104822" />
+            <p class="field-help-text">Primary DR for the M2C opportunity.</p>
+          </div>
+
+          <div class="form-field">
+            <label for="gnarr" data-required>FY26 AEM Sites license GNARR (estimated)</label>
+            <input id="gnarr" type="text" placeholder="$0" />
+            <p class="field-help-text">Estimated Move to Cloud opportunity value for AEM license component only.</p>
+          </div>
+
+          <fieldset class="form-field checkbox-field">
+            <legend data-required>Current AEM Sites Deployment(s)</legend>
+            <div class="options">
+              <label class="opt"><input type="checkbox" /> On-prem</label>
+              <label class="opt"><input type="checkbox" checked /> AMS</label>
+              <label class="opt"><input type="checkbox" /> CS</label>
+              <label class="opt"><input type="checkbox" /> EDS</label>
+            </div>
+            <p class="field-help-text">Select all that apply. Live deployments only.</p>
+          </fieldset>
+
+          <!-- dependent field, revealed because AMS is selected -->
+          <div class="form-field is-dependent">
+            <label for="cse">Name of CSE (if on AMS)</label>
+            <input id="cse" type="text" placeholder="e.g. Jordan Lee" />
+          </div>
+
+          <div class="form-field">
+            <label for="xsc" data-required>Is XSC Engaged?</label>
+            <select id="xsc">
+              <option>Yes</option>
+              <option>No</option>
+            </select>
+          </div>
+
+          <div class="form-footer">
+            <button class="btn btn-quiet">Previous</button>
+            <button class="btn btn-quiet">Save &amp; Share</button>
+            <span class="spacer"></span>
+            <button class="btn btn-primary">Next</button>
+          </div>
+        </div>
+
+        <!-- wizard nav -->
+        <nav class="form-section-nav" aria-label="Form sections">
+          <button class="nav-item done"><span class="nav-dot">&#10003;</span> Submission Info</button>
+          <button class="nav-item" aria-current="step"><span class="nav-dot">2</span> M2C Opportunity context</button>
+          <button class="nav-item"><span class="nav-dot">3</span> Migration scope</button>
+          <button class="nav-item"><span class="nav-dot">4</span> Commerce &amp; CSC</button>
+          <button class="nav-item"><span class="nav-dot">5</span> Personalization</button>
+          <button class="nav-item"><span class="nav-dot">6</span> Review &amp; submit</button>
+        </nav>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
