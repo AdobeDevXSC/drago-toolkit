@@ -9,9 +9,15 @@ ema-queue {
   --spectrum-gray-500: #909090;
   --spectrum-gray-700: #464646;
   --spectrum-gray-900: #1e1e1e;
+  --spectrum-red-100: #fbe6e5;
   --spectrum-red-800: #d31510;
+  --spectrum-blue-100: #e6f0ff;
   --spectrum-blue-800: #0265dc;
   --spectrum-blue-900: #0054b6;
+  --spectrum-green-100: #e9f7ec;
+  --spectrum-green-800: #0a7c3e;
+  --spectrum-orange-100: #fdf0e1;
+  --spectrum-orange-800: #b35c00;
   --spectrum-font-family: adobe-clean, 'Source Sans 3', 'Source Sans Pro', var(--spectrum-font-family-base, system-ui),
     sans-serif;
   --spectrum-font-size-100: 14px;
@@ -150,6 +156,21 @@ ema-queue *::after {
 .ema-queue__badge--incomplete {
   color: var(--spectrum-gray-50);
   background: var(--spectrum-red-800);
+}
+
+.ema-queue__badge--complete {
+  color: var(--spectrum-green-800);
+  background: var(--spectrum-green-100);
+}
+
+.ema-queue__badge--reviewed {
+  color: var(--spectrum-blue-900);
+  background: var(--spectrum-blue-100);
+}
+
+.ema-queue__badge--engaged {
+  color: var(--spectrum-orange-800);
+  background: var(--spectrum-orange-100);
 }
 
 .ema-queue__card-header {
@@ -433,4 +454,200 @@ body.ema-queue-loading {
     grid-template-columns: 1fr;
     gap: 2px;
   }
+}
+
+.ema-queue__filters {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 16px;
+  padding: 10px 0;
+  border-top: 1px solid var(--spectrum-gray-200);
+  border-bottom: 1px solid var(--spectrum-gray-200);
+}
+
+.ema-queue__filters-label {
+  margin-right: 2px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--spectrum-gray-500);
+}
+
+.ema-queue__filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  padding: 5px 12px;
+  border: 1px solid var(--spectrum-gray-300);
+  border-radius: 999px;
+  background: var(--spectrum-gray-50);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--spectrum-gray-700);
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+.ema-queue__filter:hover {
+  background: var(--spectrum-gray-100);
+  border-color: var(--spectrum-gray-500);
+}
+
+.ema-queue__filter:focus-visible {
+  outline: 2px solid var(--spectrum-blue-800);
+  outline-offset: 2px;
+}
+
+.ema-queue__filter.is-selected {
+  color: var(--spectrum-gray-50);
+  background: var(--spectrum-gray-900);
+  border-color: var(--spectrum-gray-900);
+}
+
+.ema-queue__filter--incomplete.is-selected {
+  background: var(--spectrum-red-800);
+  border-color: var(--spectrum-red-800);
+}
+
+.ema-queue__filter--complete.is-selected {
+  background: var(--spectrum-green-800);
+  border-color: var(--spectrum-green-800);
+}
+
+.ema-queue__filter--reviewed.is-selected {
+  background: var(--spectrum-blue-800);
+  border-color: var(--spectrum-blue-800);
+}
+
+.ema-queue__filter--engaged.is-selected {
+  background: var(--spectrum-orange-800);
+  border-color: var(--spectrum-orange-800);
+}
+
+.ema-queue__filter-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--spectrum-gray-700);
+  background: var(--spectrum-gray-200);
+}
+
+.ema-queue__filter.is-selected .ema-queue__filter-count {
+  color: var(--spectrum-gray-50);
+  background: rgb(255 255 255 / 25%);
+}
+
+.ema-queue__filter-clear {
+  margin: 0;
+  padding: 5px 8px;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--spectrum-blue-800);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.ema-queue__filter-clear:hover {
+  color: var(--spectrum-blue-900);
+}
+
+.ema-queue__filter-clear:focus-visible {
+  outline: 2px solid var(--spectrum-blue-800);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.ema-queue__card-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--spectrum-gray-200);
+}
+
+.ema-queue__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 5px 12px;
+  border: 1px solid var(--spectrum-gray-300);
+  border-radius: 999px;
+  background: var(--spectrum-gray-50);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--spectrum-gray-700);
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+.ema-queue__toggle svg {
+  display: block;
+}
+
+.ema-queue__toggle:hover:not(:disabled) {
+  background: var(--spectrum-gray-100);
+  border-color: var(--spectrum-gray-500);
+}
+
+.ema-queue__toggle:focus-visible {
+  outline: 2px solid var(--spectrum-blue-800);
+  outline-offset: 2px;
+}
+
+.ema-queue__toggle:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.ema-queue__toggle--reviewed.is-on {
+  color: var(--spectrum-blue-900);
+  background: var(--spectrum-blue-100);
+  border-color: rgb(2 101 220 / 35%);
+}
+
+.ema-queue__toggle--reviewed.is-on:hover:not(:disabled) {
+  background: var(--spectrum-blue-100);
+  border-color: var(--spectrum-blue-800);
+}
+
+.ema-queue__toggle--engaged.is-on {
+  color: var(--spectrum-orange-800);
+  background: var(--spectrum-orange-100);
+  border-color: rgb(179 92 0 / 35%);
+}
+
+.ema-queue__toggle--engaged.is-on:hover:not(:disabled) {
+  background: var(--spectrum-orange-100);
+  border-color: var(--spectrum-orange-800);
+}
+
+.ema-queue__card-date {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--spectrum-gray-500);
+}
+
+.ema-queue__card-date-label {
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
