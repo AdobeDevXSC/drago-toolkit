@@ -6,24 +6,9 @@
     <link rel="icon" href="data:,">
     <link rel="stylesheet" href="/deps/spectrum/dist/tokens.css" />
     <link rel="stylesheet" href="/tools/queue/queue.css" />
+    <script src="/tools/queue/queue.js" type="module"></script>
   </head>
   <body>
     <div id="queue-root"></div>
-    <script type="module">
-      import ENV from '/scripts/utils/env.js';
-
-      const root = document.getElementById('queue-root');
-      const devRequested = new URLSearchParams(window.location.search).has('dev');
-
-      if (root) {
-        if (ENV !== 'prod' && devRequested) {
-          const { default: mountDevQueue } = await import('/tools/queue/queue-dev.js');
-          mountDevQueue(root);
-        } else {
-          const { default: init } = await import('/tools/queue/queue.js');
-          init(root);
-        }
-      }
-    </script>
   </body>
 </html>

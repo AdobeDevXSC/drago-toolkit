@@ -39,7 +39,8 @@ export function parseFusionEndpoint(config) {
 
 /**
  * @param {Object} opts
- * @param {string} opts.token IMS bearer from DA_SDK
+ * @param {(url: string, init?: RequestInit) => Promise<Response>} [opts.daFetch]
+ *   Authenticated fetch from DA_SDK (sdk.actions.daFetch); falls back to plain fetch.
  * @param {string} opts.adminOrigin
  * @param {string} opts.org
  * @param {string} opts.repo
@@ -48,7 +49,7 @@ export function parseFusionEndpoint(config) {
  * @returns {Promise<unknown | null>}
  */
 export async function fetchDaRepoConfig({
-  token,
+  daFetch,
   adminOrigin,
   org,
   repo,
@@ -57,12 +58,10 @@ export async function fetchDaRepoConfig({
 }) {
   const base = String(adminOrigin ?? '').replace(/\/+$/, '');
   const url = `${base}/config/${encodeURIComponent(org)}/${encodeURIComponent(repo)}/${path}`;
-  const res = await fetch(url, {
+  const doFetch = typeof daFetch === 'function' ? daFetch : fetch;
+  const res = await doFetch(url, {
     method: 'GET',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: 'application/json',
-    },
+    headers: { Accept: 'application/json' },
     signal,
   });
   if (res.status === 401) {
@@ -77,7 +76,7 @@ export async function fetchDaRepoConfig({
 
 /**
  * @param {Object} opts
- * @param {string} opts.token
+ * @param {(url: string, init?: RequestInit) => Promise<Response>} [opts.daFetch]
  * @param {string} opts.adminOrigin
  * @param {string} opts.org
  * @param {string} opts.repo
@@ -89,4 +88,73 @@ export async function loadFusionEndpointFromConfig(opts) {
   const config = await fetchDaRepoConfig(opts);
   if (!config) return null;
   return parseFusionEndpoint(config);
+}
+
+/**
+ * Reads org/repo from a DA-style hash route `#/org/repo/...`.
+ * @param {string} href
+ * @returns {{ org: string, repo: string } | null}
+ */
+function parseDaOrgRepoFromHref(href) {
+  try {
+    const u = new URL(href);
+    const raw = (u.hash ?? '').replace(/^#\/?/, '').replace(/\/+$/, '');
+    const parts = raw.split('/').filter(Boolean);
+    if (parts.length < 2) return null;
+    const org = parts[0].trim();
+    const repo = parts[1].trim();
+    if (!org || !repo) return null;
+    return { org, repo };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * `?org=` and `?repo=` on the page URL (explicit override for embedded tools).
+ * @param {string} href
+ * @returns {{ org: string, repo: string } | null}
+ */
+function parseDaOrgRepoFromHrefSearchParams(href) {
+  try {
+    const u = new URL(href);
+    const org = (u.searchParams.get('org') ?? '').trim();
+    const repo = (u.searchParams.get('repo') ?? '').trim();
+    if (!org || !repo) return null;
+    return { org, repo };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Resolves org/repo from the embedded windows (self, parent, top). DA editor
+ * runs tools in an iframe whose own URL may lack the org/repo hash that the
+ * parent frame carries, so all reachable frame URLs are checked.
+ * @returns {{ org: string, repo: string } | null}
+ */
+export function parseDaOrgRepoFromEmbeddedBrowsers() {
+  /** @type {string[]} */
+  const hrefs = [];
+  const tryPush = (loc) => {
+    try {
+      const h = loc?.href;
+      if (typeof h === 'string' && h && !hrefs.includes(h)) hrefs.push(h);
+    } catch {
+      /* cross-origin frame: reading .href throws */
+    }
+  };
+  tryPush(globalThis.location);
+  if (globalThis.parent !== globalThis) tryPush(globalThis.parent.location);
+  if (globalThis.top !== globalThis) tryPush(globalThis.top.location);
+
+  for (const href of hrefs) {
+    const q = parseDaOrgRepoFromHrefSearchParams(href);
+    if (q) return q;
+  }
+  for (const href of hrefs) {
+    const p = parseDaOrgRepoFromHref(href);
+    if (p) return p;
+  }
+  return null;
 }

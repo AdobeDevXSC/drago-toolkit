@@ -17,7 +17,8 @@
  */
 import DA_SDK from 'https://da.live/nx/utils/sdk.js';
 import { LitElement, html, nothing } from '../../deps/lit/dist/index.js';
-import { loadFusionEndpointFromConfig } from '../shared/da-config.js';
+import ENV from '../../scripts/utils/env.js';
+import { loadFusionEndpointFromConfig, parseDaOrgRepoFromEmbeddedBrowsers } from '../shared/da-config.js';
 import { initSpectrum } from '../shared/spectrum-theme.js';
 
 /* global getBlockDetails */
@@ -1234,15 +1235,15 @@ class EmaQueue extends LitElement {
 customElements.define(EL_NAME, EmaQueue);
 
 export default async function init(el) {
-  let token = null;
+  let daFetch = null;
   let context = null;
   let adminOrigin = 'https://admin.da.live';
   try {
     const sdk = await DA_SDK;
-    token = sdk.token ?? null;
+    daFetch = sdk.actions?.daFetch ?? null;
     context = sdk.context ?? null;
   } catch {
-    /* DA parent not available */
+    /* DA parent not available (standalone) */
   }
   try {
     const mod = await import('https://da.live/nx/public/utils/constants.js');
@@ -1251,22 +1252,30 @@ export default async function init(el) {
     /* default adminOrigin */
   }
 
+  // org/repo: DA SDK context first, then the embedded-browser URL (the editor
+  // hash carries org/repo even when the SDK context does not).
+  const base = context ? { ...context } : {};
+  const urlOrgRepo = parseDaOrgRepoFromEmbeddedBrowsers();
+  if (urlOrgRepo) {
+    base.org = urlOrgRepo.org;
+    base.repo = urlOrgRepo.repo;
+  }
+  const org = base.org?.trim();
+  const repo = base.repo?.trim();
+
   const cmp = document.createElement(EL_NAME);
   cmp.details = typeof getBlockDetails === 'function' ? getBlockDetails(el) : {};
-  cmp.context = context && Object.keys(context).length ? { ...context } : null;
+  cmp.context = Object.keys(base).length ? base : null;
   cmp.adminOrigin = adminOrigin;
 
-  const org = context?.org?.trim();
-  const repo = context?.repo?.trim();
-
-  if (!token) {
+  if (!daFetch) {
     cmp.primeError('Sign in to Document Authoring to load the queue.');
   } else if (!org || !repo) {
     cmp.primeError('Open the queue from Document Authoring (org and repo context required).');
   } else {
     try {
       const endpoint = await loadFusionEndpointFromConfig({
-        token,
+        daFetch,
         adminOrigin,
         org,
         repo,
@@ -1284,4 +1293,33 @@ export default async function init(el) {
 
   el.replaceChildren();
   el.append(cmp);
+}
+
+/** Mount into #queue-root, with ?dev sample-data mode on non-prod environments. */
+async function boot() {
+  const root = document.getElementById('queue-root');
+  if (!root) return;
+  const devRequested = new URLSearchParams(window.location.search).has('dev');
+  try {
+    if (ENV !== 'prod' && devRequested) {
+      const { default: mountDevQueue } = await import('./queue-dev.js');
+      mountDevQueue(root);
+    } else {
+      await init(root);
+    }
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error(err);
+    root.replaceChildren();
+    const p = document.createElement('p');
+    p.textContent = `Could not start the queue: ${err?.message ?? err}`;
+    p.style.cssText = 'padding:1rem;font-family:system-ui,sans-serif';
+    root.append(p);
+  }
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', boot);
+} else {
+  boot();
 }
