@@ -398,12 +398,18 @@ function normalizeFusionQueue(payload) {
 }
 
 /**
+ * Status flags shown as badges/toggles rather than as raw field rows.
+ * Hidden from the card field count and the details modal (still exported to CSV).
+ */
+const DISPLAY_HIDDEN_KEYS = new Set(['reviewed', 'engaged', 'submitted']);
+
+/**
  * @param {QueueCardRecord} record
  * @returns {{ key: string, label: string, value: string }[]}
  */
 function getPopulatedFields(record) {
   return Object.entries(record)
-    .filter(([key]) => !META_FIELD_KEYS.has(key))
+    .filter(([key]) => !META_FIELD_KEYS.has(key) && !DISPLAY_HIDDEN_KEYS.has(key))
     .filter(([, value]) => isPresent(value))
     .map(([key, value]) => ({
       key,
