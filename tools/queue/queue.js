@@ -1,11 +1,14 @@
 /**
  * DA-embedded queue tool: lists form shares via Fusion webhook.
  *
- * POST list:   { share: "all" }
- * POST delete: { delete: "<key>" }
- * POST review: { review: "<key>", reviewed: <boolean> }
- * POST engage: { engage: "<key>", engaged: <boolean> }
- * Endpoint: DA repo config → fusion sheet → key `endpoint` (see config/repo-config.example.json).
+ * List/delete endpoint: DA repo config → fusion sheet → key `endpoint`
+ * (see config/repo-config.example.json).
+ *   POST list:   { share: "all" }
+ *   POST delete: { delete: "<key>" }
+ *
+ * Status endpoint (STATUS_ENDPOINT below) — persists reviewer actions:
+ *   POST review: { key: "<key>", reviewed: <boolean> }
+ *   POST engage: { key: "<key>", engaged: <boolean> }
  *
  * Fusion list response: array of { json: "<stringified form record>" } wrappers.
  * Each record includes `key` and the status fields `reviewed`, `engaged`, and
@@ -20,6 +23,9 @@ import { initSpectrum } from '../shared/spectrum-theme.js';
 /* global getBlockDetails */
 
 const EL_NAME = 'ema-queue';
+
+/** Fusion webhook that persists reviewer actions (reviewed / engaged). */
+const STATUS_ENDPOINT = 'https://hook.fusion.adobe.com/dp0w3vskkydd6g9z4hnra9hp45qf6qi4';
 
 const TITLE_KEYS = ['account-name', 'accountName'];
 const SUBTITLE_KEYS = ['submitter-name', 'submitterName'];
@@ -124,7 +130,7 @@ function postShareDelete(endpoint, shareId) {
  * @returns {Promise<unknown>}
  */
 function postShareReview(endpoint, shareId, reviewed) {
-  return postFusion(endpoint, { review: shareId, reviewed });
+  return postFusion(endpoint, { key: shareId, reviewed });
 }
 
 /**
@@ -135,7 +141,7 @@ function postShareReview(endpoint, shareId, reviewed) {
  * @returns {Promise<unknown>}
  */
 function postShareEngage(endpoint, shareId, engaged) {
-  return postFusion(endpoint, { engage: shareId, engaged });
+  return postFusion(endpoint, { key: shareId, engaged });
 }
 
 /**
@@ -500,6 +506,7 @@ function downloadCsv(csv, filename) {
 class EmaQueue extends LitElement {
   static properties = {
     fusionEndpoint: { attribute: false },
+    statusEndpoint: { attribute: false },
     details: { attribute: false },
     context: { attribute: false },
     adminOrigin: { attribute: false },
@@ -518,6 +525,7 @@ class EmaQueue extends LitElement {
   constructor() {
     super();
     this.fusionEndpoint = null;
+    this.statusEndpoint = STATUS_ENDPOINT;
     this.details = {};
     this.context = null;
     this.adminOrigin = 'https://admin.da.live';
@@ -722,9 +730,9 @@ class EmaQueue extends LitElement {
       this.requestUpdate();
       return;
     }
-    const endpoint = this.fusionEndpoint;
+    const endpoint = this.statusEndpoint;
     if (!endpoint) {
-      this._error = 'Fusion endpoint not configured. Add fusion.endpoint in repo DA config.';
+      this._error = 'Status endpoint not configured.';
       this.requestUpdate();
       return;
     }
@@ -756,9 +764,9 @@ class EmaQueue extends LitElement {
       this.requestUpdate();
       return;
     }
-    const endpoint = this.fusionEndpoint;
+    const endpoint = this.statusEndpoint;
     if (!endpoint) {
-      this._error = 'Fusion endpoint not configured. Add fusion.endpoint in repo DA config.';
+      this._error = 'Status endpoint not configured.';
       this.requestUpdate();
       return;
     }
