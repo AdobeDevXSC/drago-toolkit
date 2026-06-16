@@ -500,7 +500,7 @@ class EmaQueue extends LitElement {
     _loading: { state: true },
     _error: { state: true },
     _data: { state: true },
-    _expandedKeys: { state: true },
+    _detailsCardId: { state: true },
     _bootstrapped: { state: true },
     _deletingShareId: { state: true },
     _pendingDelete: { state: true },
@@ -518,7 +518,7 @@ class EmaQueue extends LitElement {
     this._loading = false;
     this._error = null;
     this._data = null;
-    this._expandedKeys = [];
+    this._detailsCardId = null;
     this._bootstrapped = false;
     this._deletingShareId = null;
     this._pendingDelete = null;
@@ -555,12 +555,13 @@ class EmaQueue extends LitElement {
   }
 
   get _modalOpen() {
-    return this._loading || Boolean(this._pendingDelete);
+    return this._loading || Boolean(this._pendingDelete) || Boolean(this._detailsCardId);
   }
 
   updated(changed) {
     super.updated(changed);
-    if (changed.has('_loading') || changed.has('_pendingDelete')) {
+    if (changed.has('_loading') || changed.has('_pendingDelete')
+      || changed.has('_detailsCardId')) {
       document.body.classList.toggle('ema-queue-loading', this._modalOpen);
     }
   }
@@ -605,18 +606,21 @@ class EmaQueue extends LitElement {
     writeFiltersToUrl(this._activeFilters);
   }
 
-  _isExpanded(cardId) {
-    return this._expandedKeys.includes(cardId);
+  /** Record whose details modal is open, resolved from the current card list. */
+  get _detailsRecord() {
+    if (!this._detailsCardId) return null;
+    return this._cards.find((c) => c.cardId === this._detailsCardId) || null;
   }
 
   /**
-   * @param {string} cardId
+   * @param {QueueCardRecord} record
    */
-  _toggleExpand(cardId) {
-    const keys = new Set(this._expandedKeys);
-    if (keys.has(cardId)) keys.delete(cardId);
-    else keys.add(cardId);
-    this._expandedKeys = [...keys];
+  _openDetails(record) {
+    this._detailsCardId = record.cardId;
+  }
+
+  _closeDetails() {
+    this._detailsCardId = null;
   }
 
   async loadShares() {
@@ -625,13 +629,11 @@ class EmaQueue extends LitElement {
       this._error = 'Fusion endpoint not configured. Add fusion.endpoint in repo DA config.';
       return;
     }
-    const preserveExpanded = this._expandedKeys;
     this._loading = true;
     this._error = null;
     this.requestUpdate();
     try {
       this._data = await postShareAll(endpoint);
-      this._expandedKeys = preserveExpanded;
     } catch (err) {
       this._data = null;
       const msg = err instanceof Error ? err.message : 'Request failed';
@@ -935,6 +937,59 @@ class EmaQueue extends LitElement {
     `;
   }
 
+  _renderDetailsModal() {
+    const record = this._detailsRecord;
+    if (!record) return nothing;
+
+    const title = pickField(record, TITLE_KEYS) || 'Submission';
+    const subtitle = pickField(record, SUBTITLE_KEYS);
+    const fields = getPopulatedFields(record);
+
+    return html`
+      <div
+        class="ema-queue__modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="ema-queue-details-title"
+        @click=${(e) => { if (e.target === e.currentTarget) this._closeDetails(); }}
+        @keydown=${(e) => { if (e.key === 'Escape') this._closeDetails(); }}
+      >
+        <div class="ema-queue__modal-dialog ema-queue__modal-dialog--details">
+          <header class="ema-queue__details-header">
+            <div class="ema-queue__details-heading">
+              <h2 id="ema-queue-details-title" class="ema-queue__details-title">${title}</h2>
+              ${subtitle
+                ? html`<p class="ema-queue__details-subtitle">${subtitle}</p>`
+                : nothing}
+            </div>
+            <button
+              type="button"
+              class="ema-queue__details-close"
+              aria-label="Close details"
+              @click=${this._closeDetails}
+              autofocus
+            >
+              <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true" focusable="false">
+                <path
+                  fill="currentColor"
+                  d="M14.5 4.6 13.4 3.5 9 7.9 4.6 3.5 3.5 4.6 7.9 9l-4.4 4.4 1.1 1.1L9 10.1l4.4 4.4 1.1-1.1L10.1 9z"
+                />
+              </svg>
+            </button>
+          </header>
+          <dl class="ema-queue__details-list">
+            ${fields.map((field) => html`
+              <div class="ema-queue__detail-row">
+                <dt class="ema-queue__detail-label">${field.label}</dt>
+                <dd class="ema-queue__detail-value ema-queue__detail-value--modal">${field.value}</dd>
+              </div>
+            `)}
+          </dl>
+        </div>
+      </div>
+    `;
+  }
+
   _renderFilters() {
     if (this._loading || this._error || this._data == null) return nothing;
     if (!this._cards.length) return nothing;
@@ -1008,26 +1063,16 @@ class EmaQueue extends LitElement {
     const title = pickField(record, TITLE_KEYS) || '(No account)';
     const subtitle = pickField(record, SUBTITLE_KEYS);
     const chips = getChipFields(record);
-    const chipKeys = new Set(chips.map((c) => c.key));
-    const titleKeys = new Set([...TITLE_KEYS, ...SUBTITLE_KEYS]);
-    const populated = getPopulatedFields(record);
+    const fieldCount = getPopulatedFields(record).length;
     const incomplete = isIncompleteSubmission(record);
     const complete = isCompleteSubmission(record);
     const reviewed = isReviewed(record);
     const engaged = isEngaged(record);
     const subDate = submittedDate(record);
-    const statusKeys = new Set(['reviewed', 'engaged', 'date-submitted', 'dateSubmitted']);
-    const detailFields = populated.filter(
-      (f) => !titleKeys.has(f.key) && !chipKeys.has(f.key)
-        && !statusKeys.has(f.key)
-        && !(incomplete && f.key === 'submitted'),
-    );
-    const expanded = this._isExpanded(cardId);
-    const moreCount = detailFields.length;
 
     return html`
       <article
-        class="ema-queue__card ${expanded ? 'ema-queue__card--expanded' : ''} ${incomplete ? 'ema-queue__card--incomplete' : ''}"
+        class="ema-queue__card ${incomplete ? 'ema-queue__card--incomplete' : ''}"
         aria-labelledby="ema-queue-card-${cardId}"
       >
         <header class="ema-queue__card-header">
@@ -1074,30 +1119,15 @@ class EmaQueue extends LitElement {
           `
           : nothing}
 
-        ${moreCount > 0
+        ${fieldCount > 0
           ? html`
             <button
               type="button"
-              class="ema-queue__expand"
-              aria-expanded=${expanded}
-              aria-controls="ema-queue-detail-${cardId}"
-              @click=${() => this._toggleExpand(cardId)}
+              class="ema-queue__view-details"
+              @click=${() => this._openDetails(record)}
             >
-              ${expanded ? 'Hide' : 'Show'} ${moreCount} more field${moreCount === 1 ? '' : 's'}
+              View all ${fieldCount} field${fieldCount === 1 ? '' : 's'}
             </button>
-          `
-          : nothing}
-
-        ${expanded && moreCount > 0
-          ? html`
-            <dl class="ema-queue__detail" id="ema-queue-detail-${cardId}">
-              ${detailFields.map((field) => html`
-                <div class="ema-queue__detail-row">
-                  <dt class="ema-queue__detail-label">${field.label}</dt>
-                  <dd class="ema-queue__detail-value">${field.value}</dd>
-                </div>
-              `)}
-            </dl>
           `
           : nothing}
 
@@ -1179,6 +1209,7 @@ class EmaQueue extends LitElement {
         ${this._renderFilters()}
         ${this._renderStatus()}
         ${this._renderResults()}
+        ${this._renderDetailsModal()}
         ${this._renderConfirmModal()}
         ${this._renderLoadingModal()}
       </div>
