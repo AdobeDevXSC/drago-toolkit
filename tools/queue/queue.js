@@ -17,7 +17,6 @@
  */
 import DA_SDK from 'https://da.live/nx/utils/sdk.js';
 import { LitElement, html, nothing } from '../../deps/lit/dist/index.js';
-import ENV from '../../scripts/utils/env.js';
 import { loadFusionEndpointFromConfig, parseDaOrgRepoFromEmbeddedBrowsers } from '../shared/da-config.js';
 import { initSpectrum } from '../shared/spectrum-theme.js';
 
@@ -1295,18 +1294,12 @@ export default async function init(el) {
   el.append(cmp);
 }
 
-/** Mount into #queue-root, with ?dev sample-data mode on non-prod environments. */
+/** Mount the queue into #queue-root. */
 async function boot() {
   const root = document.getElementById('queue-root');
   if (!root) return;
-  const devRequested = new URLSearchParams(window.location.search).has('dev');
   try {
-    if (ENV !== 'prod' && devRequested) {
-      const { default: mountDevQueue } = await import('./queue-dev.js');
-      mountDevQueue(root);
-    } else {
-      await init(root);
-    }
+    await init(root);
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error(err);
