@@ -10,9 +10,20 @@
   <body>
     <div id="queue-root"></div>
     <script type="module">
-      import init from '/tools/queue/queue.js';
+      import ENV from '/scripts/utils/env.js';
+
       const root = document.getElementById('queue-root');
-      if (root) init(root);
+      const devRequested = new URLSearchParams(window.location.search).has('dev');
+
+      if (root) {
+        if (ENV !== 'prod' && devRequested) {
+          const { default: mountDevQueue } = await import('/tools/queue/queue-dev.js');
+          mountDevQueue(root);
+        } else {
+          const { default: init } = await import('/tools/queue/queue.js');
+          init(root);
+        }
+      }
     </script>
   </body>
 </html>

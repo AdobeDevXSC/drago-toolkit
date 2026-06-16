@@ -1,6 +1,17 @@
 /**
  * Spectrum-style surface for the Queue tool (Lit + light DOM).
  */
+.ema-queue__dev-banner {
+  margin: 0;
+  padding: 8px 16px;
+  font-family: adobe-clean, 'Source Sans 3', system-ui, sans-serif;
+  font-size: 13px;
+  line-height: 1.4;
+  color: #553800;
+  background: #fdf0e1;
+  border-bottom: 1px solid #f0c98a;
+}
+
 ema-queue {
   --spectrum-gray-50: #fff;
   --spectrum-gray-100: #f8f8f8;
