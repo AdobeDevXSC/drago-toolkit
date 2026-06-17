@@ -252,7 +252,7 @@ function isCompleteSubmission(record) {
  */
 const FILTER_DEFS = [
   { key: 'incomplete', label: 'Incomplete', group: 'status', test: isIncompleteSubmission },
-  { key: 'complete', label: 'Complete', group: 'status', test: isCompleteSubmission },
+  { key: 'complete', label: 'Ready', group: 'status', test: isCompleteSubmission },
   { key: 'reviewed', label: 'Reviewed', group: 'flag', test: isReviewed },
   { key: 'engaged', label: 'Engaged', group: 'flag', test: isEngaged },
 ];
@@ -1241,7 +1241,7 @@ class EmaQueue extends LitElement {
                 ? html`<span class="ema-queue__badge ema-queue__badge--incomplete">Incomplete</span>`
                 : nothing}
               ${complete
-                ? html`<span class="ema-queue__badge ema-queue__badge--complete">Complete</span>`
+                ? html`<span class="ema-queue__badge ema-queue__badge--complete">Ready</span>`
                 : nothing}
               ${reviewed
                 ? html`<span class="ema-queue__badge ema-queue__badge--reviewed">Reviewed</span>`
