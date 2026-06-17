@@ -595,8 +595,8 @@ class EmaQueue extends LitElement {
     _bootstrapped: { state: true },
     _deletingShareId: { state: true },
     _pendingDelete: { state: true },
-    _reviewingShareId: { state: true },
-    _engagingShareId: { state: true },
+    _reviewingIds: { state: true },
+    _engagingIds: { state: true },
     _activeFilters: { state: true },
     _sort: { state: true },
   };
@@ -615,8 +615,15 @@ class EmaQueue extends LitElement {
     this._bootstrapped = false;
     this._deletingShareId = null;
     this._pendingDelete = null;
-    this._reviewingShareId = null;
-    this._engagingShareId = null;
+    /** @type {Set<string>} share ids with an in-flight reviewed POST */
+    this._reviewingIds = new Set();
+    /** @type {Set<string>} share ids with an in-flight engaged POST */
+    this._engagingIds = new Set();
+    /**
+     * Confirmed local edits applied over the loaded data until the next reload.
+     * @type {Map<string, { reviewed?: boolean, engaged?: boolean }>}
+     */
+    this._statusOverrides = new Map();
     this._activeFilters = readFiltersFromUrl();
     this._sort = readSortFromUrl();
   }
@@ -661,7 +668,12 @@ class EmaQueue extends LitElement {
   }
 
   get _cards() {
-    return normalizeFusionQueue(this._data);
+    const cards = normalizeFusionQueue(this._data);
+    if (!this._statusOverrides.size) return cards;
+    return cards.map((card) => {
+      const override = this._statusOverrides.get(card.shareId);
+      return override ? { ...card, ...override } : card;
+    });
   }
 
   get _visibleCards() {
@@ -669,10 +681,19 @@ class EmaQueue extends LitElement {
     return sortCards(filtered, this._sort);
   }
 
-  /** True while any delete/review/engage mutation is in flight or pending. */
-  get _busy() {
-    return this._loading || Boolean(this._deletingShareId) || Boolean(this._pendingDelete)
-      || Boolean(this._reviewingShareId) || Boolean(this._engagingShareId);
+  /** True while a delete is pending/in flight (blocks delete + the loading modal). */
+  get _deleteBusy() {
+    return this._loading || Boolean(this._deletingShareId) || Boolean(this._pendingDelete);
+  }
+
+  /**
+   * Per-card busy: a reviewed/engaged POST in flight, or this card is being deleted.
+   * @param {string} shareId
+   * @returns {boolean}
+   */
+  _cardBusy(shareId) {
+    return this._reviewingIds.has(shareId) || this._engagingIds.has(shareId)
+      || this._deletingShareId === shareId;
   }
 
   /** Count of all loaded cards matching each filter, for the pill badges. */
@@ -739,6 +760,8 @@ class EmaQueue extends LitElement {
     this.requestUpdate();
     try {
       this._data = await postShareAll(endpoint);
+      // fresh server data supersedes any optimistic local edits
+      this._statusOverrides.clear();
     } catch (err) {
       this._data = null;
       const msg = err instanceof Error ? err.message : 'Request failed';
@@ -758,7 +781,7 @@ class EmaQueue extends LitElement {
    */
   _onDeleteClick(record) {
     const { shareId } = record;
-    if (this._busy) return;
+    if (this._deleteBusy) return;
     if (!shareId) {
       this._error = 'Cannot delete: no share key on this row. Fusion must return key, shareId, id, or share_id.';
       this.requestUpdate();
@@ -810,71 +833,81 @@ class EmaQueue extends LitElement {
   }
 
   /**
-   * Toggle the reviewed flag and persist it through Fusion.
-   * @param {QueueCardRecord} record
+   * Merge a confirmed local edit so the card reflects it without a full reload.
+   * @param {string} shareId
+   * @param {{ reviewed?: boolean, engaged?: boolean }} patch
    */
-  async _onToggleReviewed(record) {
+  _setStatusOverride(shareId, patch) {
+    const prev = this._statusOverrides.get(shareId) || {};
+    this._statusOverrides.set(shareId, { ...prev, ...patch });
+  }
+
+  /**
+   * Persist one status flag, flipping the card only after the POST confirms.
+   * Per-card and concurrent — no full reload.
+   * @param {QueueCardRecord} record
+   * @param {{ field: 'reviewed' | 'engaged', current: boolean,
+   *   inflight: Set<string>, setInflight: (s: Set<string>) => void,
+   *   post: (endpoint: string, shareId: string, next: boolean) => Promise<unknown>,
+   *   errorMsg: string }} cfg
+   */
+  async _toggleStatus(record, cfg) {
     const { shareId } = record;
-    if (this._busy) return;
     if (!shareId) {
-      this._error = 'Cannot mark reviewed: no share key on this row.';
+      this._error = `Cannot mark ${cfg.field}: no share key on this row.`;
       this.requestUpdate();
       return;
     }
+    if (cfg.inflight.has(shareId)) return;
     const endpoint = this.statusEndpoint;
     if (!endpoint) {
       this._error = 'Status endpoint not configured.';
       this.requestUpdate();
       return;
     }
-    const nextReviewed = !isReviewed(record);
-    this._reviewingShareId = shareId;
+    const next = !cfg.current;
+    cfg.setInflight(new Set(cfg.inflight).add(shareId));
     this._error = null;
     this.requestUpdate();
     try {
-      await postShareReview(endpoint, shareId, nextReviewed);
-      await this.loadShares();
+      await cfg.post(endpoint, shareId, next);
+      this._setStatusOverride(shareId, { [cfg.field]: next });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Could not update reviewed state';
-      this._error = msg;
+      this._error = err instanceof Error ? err.message : cfg.errorMsg;
     } finally {
-      this._reviewingShareId = null;
+      const done = new Set(cfg.field === 'reviewed' ? this._reviewingIds : this._engagingIds);
+      done.delete(shareId);
+      cfg.setInflight(done);
       this.requestUpdate();
     }
   }
 
   /**
-   * Toggle the engaged flag and persist it through Fusion.
    * @param {QueueCardRecord} record
    */
-  async _onToggleEngaged(record) {
-    const { shareId } = record;
-    if (this._busy) return;
-    if (!shareId) {
-      this._error = 'Cannot mark engaged: no share key on this row.';
-      this.requestUpdate();
-      return;
-    }
-    const endpoint = this.statusEndpoint;
-    if (!endpoint) {
-      this._error = 'Status endpoint not configured.';
-      this.requestUpdate();
-      return;
-    }
-    const nextEngaged = !isEngaged(record);
-    this._engagingShareId = shareId;
-    this._error = null;
-    this.requestUpdate();
-    try {
-      await postShareEngage(endpoint, shareId, nextEngaged);
-      await this.loadShares();
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Could not update engaged state';
-      this._error = msg;
-    } finally {
-      this._engagingShareId = null;
-      this.requestUpdate();
-    }
+  _onToggleReviewed(record) {
+    return this._toggleStatus(record, {
+      field: 'reviewed',
+      current: isReviewed(record),
+      inflight: this._reviewingIds,
+      setInflight: (s) => { this._reviewingIds = s; },
+      post: postShareReview,
+      errorMsg: 'Could not update reviewed state',
+    });
+  }
+
+  /**
+   * @param {QueueCardRecord} record
+   */
+  _onToggleEngaged(record) {
+    return this._toggleStatus(record, {
+      field: 'engaged',
+      current: isEngaged(record),
+      inflight: this._engagingIds,
+      setInflight: (s) => { this._engagingIds = s; },
+      post: postShareEngage,
+      errorMsg: 'Could not update engaged state',
+    });
   }
 
   /**
@@ -886,7 +919,7 @@ class EmaQueue extends LitElement {
    */
   _renderStatusToggle(record, cfg) {
     const { shareId } = record;
-    const disabled = this._busy || !shareId;
+    const disabled = !shareId || this._deleteBusy || this._cardBusy(shareId);
     let label = cfg.on ? cfg.onLabel : cfg.offLabel;
     if (cfg.busy) label = cfg.busyLabel;
     if (!shareId) label = cfg.missingLabel;
@@ -913,7 +946,7 @@ class EmaQueue extends LitElement {
     const reviewed = isReviewed(record);
     return this._renderStatusToggle(record, {
       on: reviewed,
-      busy: this._reviewingShareId === record.shareId,
+      busy: this._reviewingIds.has(record.shareId),
       modifier: 'reviewed',
       icon: 'M6.7 13.3 2.9 9.5l1.2-1.2 2.6 2.6 7-7L15 4.1l-8.3 9.2Z',
       onLabel: 'Reviewed — click to unmark',
@@ -930,7 +963,7 @@ class EmaQueue extends LitElement {
     const engaged = isEngaged(record);
     return this._renderStatusToggle(record, {
       on: engaged,
-      busy: this._engagingShareId === record.shareId,
+      busy: this._engagingIds.has(record.shareId),
       modifier: 'engaged',
       icon: 'M9 1.5a7.5 7.5 0 1 0 0 15 7.5 7.5 0 0 0 0-15Zm3.3 5.6-3.9 3.9a.6.6 0 0 1-.85 0L5.7 9.05l.85-.85 1.6 1.6 3.5-3.5.85.8Z',
       onLabel: 'Engaged — click to unmark',
@@ -946,7 +979,7 @@ class EmaQueue extends LitElement {
   _renderDeleteButton(record) {
     const { shareId } = record;
     const busy = this._deletingShareId === shareId;
-    const disabled = this._busy;
+    const disabled = this._deleteBusy || this._cardBusy(shareId);
     const missingKey = !shareId;
     let label = 'Delete submission';
     if (busy) label = 'Deleting submission';
