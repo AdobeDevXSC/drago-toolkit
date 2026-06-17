@@ -200,26 +200,36 @@ function isEngaged(record) {
 }
 
 /**
+ * Parse `date-submitted` into epoch ms, or null when absent/unparseable.
+ * Date-only values are built in local time so they don't shift a day across zones.
+ * @param {QueueCardRecord} record
+ * @returns {number | null}
+ */
+function submittedTimestamp(record) {
+  const raw = record['date-submitted'] ?? record.dateSubmitted;
+  if (!isPresent(raw)) return null;
+  const str = String(raw).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+    const [y, m, d] = str.split('-').map(Number);
+    return new Date(y, m - 1, d).getTime();
+  }
+  const ms = typeof raw === 'number' ? raw : Date.parse(str);
+  return Number.isNaN(ms) ? null : ms;
+}
+
+/**
  * Format the persisted `date-submitted` value for display. Returns '' when absent
- * or unparseable so the date line can be omitted.
+ * so the date line can be omitted; falls back to the raw string if unparseable.
  * @param {QueueCardRecord} record
  * @returns {string}
  */
 function submittedDate(record) {
-  const raw = record['date-submitted'] ?? record.dateSubmitted;
-  if (!isPresent(raw)) return '';
-  const str = String(raw).trim();
-  let date;
-  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
-    // Date-only: build in local time so it doesn't shift a day across time zones.
-    const [y, m, d] = str.split('-').map(Number);
-    date = new Date(y, m - 1, d);
-  } else {
-    const ms = typeof raw === 'number' ? raw : Date.parse(str);
-    if (Number.isNaN(ms)) return str;
-    date = new Date(ms);
+  const ms = submittedTimestamp(record);
+  if (ms === null) {
+    const raw = record['date-submitted'] ?? record.dateSubmitted;
+    return isPresent(raw) ? String(raw).trim() : '';
   }
-  return date.toLocaleDateString(undefined, {
+  return new Date(ms).toLocaleDateString(undefined, {
     year: 'numeric', month: 'short', day: 'numeric',
   });
 }
@@ -286,6 +296,74 @@ function writeFiltersToUrl(keys) {
     const url = new URL(window.location.href);
     if (keys.length) url.searchParams.set('filter', keys.join(','));
     else url.searchParams.delete('filter');
+    window.history.replaceState(null, '', url);
+  } catch {
+    /* history not available */
+  }
+}
+
+/** Sort options for the queue. */
+const SORT_DEFS = [
+  { key: 'date-desc', label: 'Date (newest first)' },
+  { key: 'date-asc', label: 'Date (oldest first)' },
+  { key: 'name-asc', label: 'Account name (A–Z)' },
+  { key: 'name-desc', label: 'Account name (Z–A)' },
+];
+
+const SORT_KEYS = new Set(SORT_DEFS.map((s) => s.key));
+const DEFAULT_SORT = 'date-desc';
+
+/**
+ * @param {QueueCardRecord} record
+ * @returns {string}
+ */
+function accountSortKey(record) {
+  return pickField(record, TITLE_KEYS).trim().toLowerCase();
+}
+
+/**
+ * Sort a copy of the cards. Records without a date sort to the end (both
+ * directions); ties keep their original queue order (stable sort).
+ * @param {QueueCardRecord[]} cards
+ * @param {string} sortKey
+ * @returns {QueueCardRecord[]}
+ */
+function sortCards(cards, sortKey) {
+  const byName = sortKey === 'name-asc' || sortKey === 'name-desc';
+  const dir = sortKey === 'date-asc' || sortKey === 'name-asc' ? 1 : -1;
+  return [...cards].sort((a, b) => {
+    if (byName) {
+      return dir * accountSortKey(a).localeCompare(accountSortKey(b));
+    }
+    const ta = submittedTimestamp(a);
+    const tb = submittedTimestamp(b);
+    if (ta === null && tb === null) return 0;
+    if (ta === null) return 1;
+    if (tb === null) return -1;
+    return dir * (ta - tb);
+  });
+}
+
+/**
+ * @returns {string}
+ */
+function readSortFromUrl() {
+  try {
+    const raw = new URL(window.location.href).searchParams.get('sort') || '';
+    return SORT_KEYS.has(raw) ? raw : DEFAULT_SORT;
+  } catch {
+    return DEFAULT_SORT;
+  }
+}
+
+/**
+ * @param {string} sortKey
+ */
+function writeSortToUrl(sortKey) {
+  try {
+    const url = new URL(window.location.href);
+    if (sortKey && sortKey !== DEFAULT_SORT) url.searchParams.set('sort', sortKey);
+    else url.searchParams.delete('sort');
     window.history.replaceState(null, '', url);
   } catch {
     /* history not available */
@@ -520,6 +598,7 @@ class EmaQueue extends LitElement {
     _reviewingShareId: { state: true },
     _engagingShareId: { state: true },
     _activeFilters: { state: true },
+    _sort: { state: true },
   };
 
   constructor() {
@@ -539,6 +618,7 @@ class EmaQueue extends LitElement {
     this._reviewingShareId = null;
     this._engagingShareId = null;
     this._activeFilters = readFiltersFromUrl();
+    this._sort = readSortFromUrl();
   }
 
   createRenderRoot() {
@@ -585,7 +665,8 @@ class EmaQueue extends LitElement {
   }
 
   get _visibleCards() {
-    return this._cards.filter((record) => matchesFilters(record, this._activeFilters));
+    const filtered = this._cards.filter((record) => matchesFilters(record, this._activeFilters));
+    return sortCards(filtered, this._sort);
   }
 
   /** True while any delete/review/engage mutation is in flight or pending. */
@@ -618,6 +699,16 @@ class EmaQueue extends LitElement {
     if (!this._activeFilters.length) return;
     this._activeFilters = [];
     writeFiltersToUrl(this._activeFilters);
+  }
+
+  /**
+   * @param {Event} e
+   */
+  _onSortChange(e) {
+    const { value } = /** @type {HTMLSelectElement} */ (e.target);
+    if (!SORT_KEYS.has(value)) return;
+    this._sort = value;
+    writeSortToUrl(value);
   }
 
   /** Record whose details modal is open, resolved from the current card list. */
@@ -1039,6 +1130,26 @@ class EmaQueue extends LitElement {
     `;
   }
 
+  _renderSort() {
+    if (this._loading || this._error || this._data == null) return nothing;
+    if (!this._cards.length) return nothing;
+
+    return html`
+      <div class="ema-queue__sort">
+        <label class="ema-queue__sort-label" for="ema-queue-sort">Sort</label>
+        <select
+          id="ema-queue-sort"
+          class="ema-queue__sort-select"
+          @change=${this._onSortChange}
+        >
+          ${SORT_DEFS.map((s) => html`
+            <option value=${s.key} ?selected=${this._sort === s.key}>${s.label}</option>
+          `)}
+        </select>
+      </div>
+    `;
+  }
+
   _renderStatus() {
     if (this._error) {
       return html`
@@ -1221,6 +1332,7 @@ class EmaQueue extends LitElement {
           </sp-button>
         </div>
         ${this._renderFilters()}
+        ${this._renderSort()}
         ${this._renderStatus()}
         ${this._renderResults()}
         ${this._renderDetailsModal()}
