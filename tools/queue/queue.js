@@ -145,15 +145,15 @@ function postShareEngage(endpoint, shareId, engaged) {
 }
 
 /**
+ * Strict boolean check for the `reviewed` / `engaged` flags. Only a real boolean
+ * `true` (or the string "true") counts — a "Yes" value (e.g. from is-xsc-engaged)
+ * must not read as engaged/reviewed.
  * @param {unknown} value
  * @returns {boolean}
  */
-function isTruthyFlag(value) {
+function isBooleanTrue(value) {
   if (value === true) return true;
-  if (typeof value === 'string') {
-    const s = value.trim().toLowerCase();
-    return s === 'true' || s === 'yes';
-  }
+  if (typeof value === 'string') return value.trim().toLowerCase() === 'true';
   return false;
 }
 
@@ -186,7 +186,7 @@ function isIncompleteSubmission(record) {
  * @returns {boolean}
  */
 function isReviewed(record) {
-  return isTruthyFlag(record.reviewed);
+  return isBooleanTrue(record.reviewed);
 }
 
 /**
@@ -196,7 +196,7 @@ function isReviewed(record) {
  * @returns {boolean}
  */
 function isEngaged(record) {
-  return isTruthyFlag(record.engaged);
+  return isBooleanTrue(record.engaged);
 }
 
 /**
