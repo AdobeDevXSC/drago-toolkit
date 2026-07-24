@@ -6,13 +6,9 @@
     <link rel="icon" href="data:,">
     <link rel="stylesheet" href="/deps/spectrum/dist/tokens.css" />
     <link rel="stylesheet" href="/tools/queue/queue.css" />
+    <script src="/tools/queue/queue.js" type="module"></script>
   </head>
   <body>
     <div id="queue-root"></div>
-    <script type="module">
-      import init from '/tools/queue/queue.js';
-      const root = document.getElementById('queue-root');
-      if (root) init(root);
-    </script>
   </body>
 </html>

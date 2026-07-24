@@ -1,21 +1,31 @@
 /**
  * DA-embedded queue tool: lists form shares via Fusion webhook.
  *
- * POST list: { share: "all" }
- * POST delete: { delete: "<key>" }
- * Endpoint: DA repo config → fusion sheet → key `endpoint` (see config/repo-config.example.json).
+ * List/delete endpoint: DA repo config → fusion sheet → key `endpoint`
+ * (see config/repo-config.example.json).
+ *   POST list:   { share: "all" }
+ *   POST delete: { delete: "<key>" }
+ *
+ * Status endpoint (STATUS_ENDPOINT below) — persists reviewer actions:
+ *   POST review: { key: "<key>", reviewed: <boolean> }
+ *   POST engage: { key: "<key>", engaged: <boolean> }
  *
  * Fusion list response: array of { json: "<stringified form record>" } wrappers.
- * Each record includes `key` — sent as `delete` when removing a share.
+ * Each record includes `key` and the status fields `reviewed`, `engaged`, and
+ * `date-submitted`. `reviewed`/`engaged` are persisted back through Fusion so the
+ * state is shared across all reviewers (not browser-local).
  */
 import DA_SDK from 'https://da.live/nx/utils/sdk.js';
 import { LitElement, html, nothing } from '../../deps/lit/dist/index.js';
-import { loadFusionEndpointFromConfig } from '../shared/da-config.js';
+import { loadFusionEndpointFromConfig, parseDaOrgRepoFromEmbeddedBrowsers } from '../shared/da-config.js';
 import { initSpectrum } from '../shared/spectrum-theme.js';
 
 /* global getBlockDetails */
 
 const EL_NAME = 'ema-queue';
+
+/** Fusion webhook that persists reviewer actions (reviewed / engaged). */
+const STATUS_ENDPOINT = 'https://hook.fusion.adobe.com/dp0w3vskkydd6g9z4hnra9hp45qf6qi4';
 
 const TITLE_KEYS = ['account-name', 'accountName'];
 const SUBTITLE_KEYS = ['submitter-name', 'submitterName'];
@@ -113,6 +123,41 @@ function postShareDelete(endpoint, shareId) {
 }
 
 /**
+ * Persist the reviewed flag for a share back through Fusion.
+ * @param {string} endpoint
+ * @param {string} shareId
+ * @param {boolean} reviewed
+ * @returns {Promise<unknown>}
+ */
+function postShareReview(endpoint, shareId, reviewed) {
+  return postFusion(endpoint, { key: shareId, reviewed });
+}
+
+/**
+ * Persist the engaged flag for a share back through Fusion.
+ * @param {string} endpoint
+ * @param {string} shareId
+ * @param {boolean} engaged
+ * @returns {Promise<unknown>}
+ */
+function postShareEngage(endpoint, shareId, engaged) {
+  return postFusion(endpoint, { key: shareId, engaged });
+}
+
+/**
+ * Strict boolean check for the `reviewed` / `engaged` flags. Only a real boolean
+ * `true` (or the string "true") counts — a "Yes" value (e.g. from is-xsc-engaged)
+ * must not read as engaged/reviewed.
+ * @param {unknown} value
+ * @returns {boolean}
+ */
+function isBooleanTrue(value) {
+  if (value === true) return true;
+  if (typeof value === 'string') return value.trim().toLowerCase() === 'true';
+  return false;
+}
+
+/**
  * @param {unknown} value
  * @returns {boolean}
  */
@@ -133,6 +178,196 @@ function isIncompleteSubmission(record) {
     return true;
   }
   return false;
+}
+
+/**
+ * Reviewed is a human action persisted on the Fusion record as `reviewed`.
+ * @param {QueueCardRecord} record
+ * @returns {boolean}
+ */
+function isReviewed(record) {
+  return isBooleanTrue(record.reviewed);
+}
+
+/**
+ * Engaged is a human action persisted on the Fusion record as `engaged`.
+ * Distinct from the `is-xsc-engaged` form answer, which stays a card chip.
+ * @param {QueueCardRecord} record
+ * @returns {boolean}
+ */
+function isEngaged(record) {
+  return isBooleanTrue(record.engaged);
+}
+
+/**
+ * Parse `date-submitted` into epoch ms, or null when absent/unparseable.
+ * Date-only values are built in local time so they don't shift a day across zones.
+ * @param {QueueCardRecord} record
+ * @returns {number | null}
+ */
+function submittedTimestamp(record) {
+  const raw = record['date-submitted'] ?? record.dateSubmitted;
+  if (!isPresent(raw)) return null;
+  const str = String(raw).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+    const [y, m, d] = str.split('-').map(Number);
+    return new Date(y, m - 1, d).getTime();
+  }
+  const ms = typeof raw === 'number' ? raw : Date.parse(str);
+  return Number.isNaN(ms) ? null : ms;
+}
+
+/**
+ * Format the persisted `date-submitted` value for display. Returns '' when absent
+ * so the date line can be omitted; falls back to the raw string if unparseable.
+ * @param {QueueCardRecord} record
+ * @returns {string}
+ */
+function submittedDate(record) {
+  const ms = submittedTimestamp(record);
+  if (ms === null) {
+    const raw = record['date-submitted'] ?? record.dateSubmitted;
+    return isPresent(raw) ? String(raw).trim() : '';
+  }
+  return new Date(ms).toLocaleDateString(undefined, {
+    year: 'numeric', month: 'short', day: 'numeric',
+  });
+}
+
+/**
+ * "Complete" is the unprocessed bucket: submitted, but not yet reviewed or engaged.
+ * Reviewed and Engaged are the further-along states and own their cards instead.
+ * @param {QueueCardRecord} record
+ * @returns {boolean}
+ */
+function isCompleteSubmission(record) {
+  return !isIncompleteSubmission(record) && !isReviewed(record) && !isEngaged(record);
+}
+
+/**
+ * Queue filters. `status` filters (Incomplete/Complete) combine as OR within the
+ * group; `flag` filters (Reviewed/Engaged) each add an AND constraint.
+ * @typedef {(record: QueueCardRecord) => boolean} FilterTest
+ * @type {{ key: string, label: string, group: 'status' | 'flag', test: FilterTest }[]}
+ */
+const FILTER_DEFS = [
+  { key: 'incomplete', label: 'Incomplete', group: 'status', test: isIncompleteSubmission },
+  { key: 'complete', label: 'Ready', group: 'status', test: isCompleteSubmission },
+  { key: 'reviewed', label: 'Reviewed', group: 'flag', test: isReviewed },
+  { key: 'engaged', label: 'Engaged', group: 'flag', test: isEngaged },
+];
+
+const FILTER_KEYS = new Set(FILTER_DEFS.map((f) => f.key));
+
+/**
+ * @param {QueueCardRecord} record
+ * @param {string[]} activeKeys
+ * @returns {boolean}
+ */
+function matchesFilters(record, activeKeys) {
+  if (!activeKeys.length) return true;
+  const active = FILTER_DEFS.filter((f) => activeKeys.includes(f.key));
+  const statusActive = active.filter((f) => f.group === 'status');
+  const flagActive = active.filter((f) => f.group === 'flag');
+  if (statusActive.length && !statusActive.some((f) => f.test(record))) return false;
+  if (flagActive.length && !flagActive.every((f) => f.test(record))) return false;
+  return true;
+}
+
+/**
+ * Read active filter keys from the URL `?filter=` param.
+ * @returns {string[]}
+ */
+function readFiltersFromUrl() {
+  try {
+    const raw = new URL(window.location.href).searchParams.get('filter') || '';
+    return raw.split(',').map((s) => s.trim()).filter((k) => FILTER_KEYS.has(k));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Reflect active filter keys into the URL for shareable views.
+ * @param {string[]} keys
+ */
+function writeFiltersToUrl(keys) {
+  try {
+    const url = new URL(window.location.href);
+    if (keys.length) url.searchParams.set('filter', keys.join(','));
+    else url.searchParams.delete('filter');
+    window.history.replaceState(null, '', url);
+  } catch {
+    /* history not available */
+  }
+}
+
+/** Sort options for the queue. */
+const SORT_DEFS = [
+  { key: 'date-desc', label: 'Date (newest first)' },
+  { key: 'date-asc', label: 'Date (oldest first)' },
+  { key: 'name-asc', label: 'Account name (A–Z)' },
+  { key: 'name-desc', label: 'Account name (Z–A)' },
+];
+
+const SORT_KEYS = new Set(SORT_DEFS.map((s) => s.key));
+const DEFAULT_SORT = 'date-desc';
+
+/**
+ * @param {QueueCardRecord} record
+ * @returns {string}
+ */
+function accountSortKey(record) {
+  return pickField(record, TITLE_KEYS).trim().toLowerCase();
+}
+
+/**
+ * Sort a copy of the cards. Records without a date sort to the end (both
+ * directions); ties keep their original queue order (stable sort).
+ * @param {QueueCardRecord[]} cards
+ * @param {string} sortKey
+ * @returns {QueueCardRecord[]}
+ */
+function sortCards(cards, sortKey) {
+  const byName = sortKey === 'name-asc' || sortKey === 'name-desc';
+  const dir = sortKey === 'date-asc' || sortKey === 'name-asc' ? 1 : -1;
+  return [...cards].sort((a, b) => {
+    if (byName) {
+      return dir * accountSortKey(a).localeCompare(accountSortKey(b));
+    }
+    const ta = submittedTimestamp(a);
+    const tb = submittedTimestamp(b);
+    if (ta === null && tb === null) return 0;
+    if (ta === null) return 1;
+    if (tb === null) return -1;
+    return dir * (ta - tb);
+  });
+}
+
+/**
+ * @returns {string}
+ */
+function readSortFromUrl() {
+  try {
+    const raw = new URL(window.location.href).searchParams.get('sort') || '';
+    return SORT_KEYS.has(raw) ? raw : DEFAULT_SORT;
+  } catch {
+    return DEFAULT_SORT;
+  }
+}
+
+/**
+ * @param {string} sortKey
+ */
+function writeSortToUrl(sortKey) {
+  try {
+    const url = new URL(window.location.href);
+    if (sortKey && sortKey !== DEFAULT_SORT) url.searchParams.set('sort', sortKey);
+    else url.searchParams.delete('sort');
+    window.history.replaceState(null, '', url);
+  } catch {
+    /* history not available */
+  }
 }
 
 /**
@@ -190,6 +425,7 @@ const META_FIELD_KEYS = new Set([
  *   queueIndex?: number;
  *   recordIndex?: number;
  *   parseError?: boolean;
+ *   reviewed?: boolean | string;
  * }} QueueCardRecord
  */
 
@@ -246,12 +482,18 @@ function normalizeFusionQueue(payload) {
 }
 
 /**
+ * Status flags shown as badges/toggles rather than as raw field rows.
+ * Hidden from the card field count and the details modal (still exported to CSV).
+ */
+const DISPLAY_HIDDEN_KEYS = new Set(['reviewed', 'engaged', 'submitted']);
+
+/**
  * @param {QueueCardRecord} record
  * @returns {{ key: string, label: string, value: string }[]}
  */
 function getPopulatedFields(record) {
   return Object.entries(record)
-    .filter(([key]) => !META_FIELD_KEYS.has(key))
+    .filter(([key]) => !META_FIELD_KEYS.has(key) && !DISPLAY_HIDDEN_KEYS.has(key))
     .filter(([, value]) => isPresent(value))
     .map(([key, value]) => ({
       key,
@@ -342,31 +584,48 @@ function downloadCsv(csv, filename) {
 class EmaQueue extends LitElement {
   static properties = {
     fusionEndpoint: { attribute: false },
+    statusEndpoint: { attribute: false },
     details: { attribute: false },
     context: { attribute: false },
     adminOrigin: { attribute: false },
     _loading: { state: true },
     _error: { state: true },
     _data: { state: true },
-    _expandedKeys: { state: true },
+    _detailsCardId: { state: true },
     _bootstrapped: { state: true },
     _deletingShareId: { state: true },
     _pendingDelete: { state: true },
+    _reviewingIds: { state: true },
+    _engagingIds: { state: true },
+    _activeFilters: { state: true },
+    _sort: { state: true },
   };
 
   constructor() {
     super();
     this.fusionEndpoint = null;
+    this.statusEndpoint = STATUS_ENDPOINT;
     this.details = {};
     this.context = null;
     this.adminOrigin = 'https://admin.da.live';
     this._loading = false;
     this._error = null;
     this._data = null;
-    this._expandedKeys = [];
+    this._detailsCardId = null;
     this._bootstrapped = false;
     this._deletingShareId = null;
     this._pendingDelete = null;
+    /** @type {Set<string>} share ids with an in-flight reviewed POST */
+    this._reviewingIds = new Set();
+    /** @type {Set<string>} share ids with an in-flight engaged POST */
+    this._engagingIds = new Set();
+    /**
+     * Confirmed local edits applied over the loaded data until the next reload.
+     * @type {Map<string, { reviewed?: boolean, engaged?: boolean }>}
+     */
+    this._statusOverrides = new Map();
+    this._activeFilters = readFiltersFromUrl();
+    this._sort = readSortFromUrl();
   }
 
   createRenderRoot() {
@@ -397,32 +656,97 @@ class EmaQueue extends LitElement {
   }
 
   get _modalOpen() {
-    return this._loading || Boolean(this._pendingDelete);
+    return this._loading || Boolean(this._pendingDelete) || Boolean(this._detailsCardId);
   }
 
   updated(changed) {
     super.updated(changed);
-    if (changed.has('_loading') || changed.has('_pendingDelete')) {
+    if (changed.has('_loading') || changed.has('_pendingDelete')
+      || changed.has('_detailsCardId')) {
       document.body.classList.toggle('ema-queue-loading', this._modalOpen);
     }
   }
 
   get _cards() {
-    return normalizeFusionQueue(this._data);
+    const cards = normalizeFusionQueue(this._data);
+    if (!this._statusOverrides.size) return cards;
+    return cards.map((card) => {
+      const override = this._statusOverrides.get(card.shareId);
+      return override ? { ...card, ...override } : card;
+    });
   }
 
-  _isExpanded(cardId) {
-    return this._expandedKeys.includes(cardId);
+  get _visibleCards() {
+    const filtered = this._cards.filter((record) => matchesFilters(record, this._activeFilters));
+    return sortCards(filtered, this._sort);
+  }
+
+  /** True while a delete is pending/in flight (blocks delete + the loading modal). */
+  get _deleteBusy() {
+    return this._loading || Boolean(this._deletingShareId) || Boolean(this._pendingDelete);
   }
 
   /**
-   * @param {string} cardId
+   * Per-card busy: a reviewed/engaged POST in flight, or this card is being deleted.
+   * @param {string} shareId
+   * @returns {boolean}
    */
-  _toggleExpand(cardId) {
-    const keys = new Set(this._expandedKeys);
-    if (keys.has(cardId)) keys.delete(cardId);
-    else keys.add(cardId);
-    this._expandedKeys = [...keys];
+  _cardBusy(shareId) {
+    return this._reviewingIds.has(shareId) || this._engagingIds.has(shareId)
+      || this._deletingShareId === shareId;
+  }
+
+  /** Count of all loaded cards matching each filter, for the pill badges. */
+  get _filterCounts() {
+    const cards = this._cards;
+    return FILTER_DEFS.reduce((acc, f) => {
+      acc[f.key] = cards.filter(f.test).length;
+      return acc;
+    }, /** @type {Record<string, number>} */ ({}));
+  }
+
+  /**
+   * @param {string} key
+   */
+  _toggleFilter(key) {
+    const next = new Set(this._activeFilters);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    this._activeFilters = FILTER_DEFS.map((f) => f.key).filter((k) => next.has(k));
+    writeFiltersToUrl(this._activeFilters);
+  }
+
+  _clearFilters() {
+    if (!this._activeFilters.length) return;
+    this._activeFilters = [];
+    writeFiltersToUrl(this._activeFilters);
+  }
+
+  /**
+   * @param {Event} e
+   */
+  _onSortChange(e) {
+    const { value } = /** @type {HTMLSelectElement} */ (e.target);
+    if (!SORT_KEYS.has(value)) return;
+    this._sort = value;
+    writeSortToUrl(value);
+  }
+
+  /** Record whose details modal is open, resolved from the current card list. */
+  get _detailsRecord() {
+    if (!this._detailsCardId) return null;
+    return this._cards.find((c) => c.cardId === this._detailsCardId) || null;
+  }
+
+  /**
+   * @param {QueueCardRecord} record
+   */
+  _openDetails(record) {
+    this._detailsCardId = record.cardId;
+  }
+
+  _closeDetails() {
+    this._detailsCardId = null;
   }
 
   async loadShares() {
@@ -431,13 +755,13 @@ class EmaQueue extends LitElement {
       this._error = 'Fusion endpoint not configured. Add fusion.endpoint in repo DA config.';
       return;
     }
-    const preserveExpanded = this._expandedKeys;
     this._loading = true;
     this._error = null;
     this.requestUpdate();
     try {
       this._data = await postShareAll(endpoint);
-      this._expandedKeys = preserveExpanded;
+      // fresh server data supersedes any optimistic local edits
+      this._statusOverrides.clear();
     } catch (err) {
       this._data = null;
       const msg = err instanceof Error ? err.message : 'Request failed';
@@ -457,7 +781,7 @@ class EmaQueue extends LitElement {
    */
   _onDeleteClick(record) {
     const { shareId } = record;
-    if (this._loading || this._deletingShareId || this._pendingDelete) return;
+    if (this._deleteBusy) return;
     if (!shareId) {
       this._error = 'Cannot delete: no share key on this row. Fusion must return key, shareId, id, or share_id.';
       this.requestUpdate();
@@ -508,11 +832,154 @@ class EmaQueue extends LitElement {
     }
   }
 
+  /**
+   * Merge a confirmed local edit so the card reflects it without a full reload.
+   * @param {string} shareId
+   * @param {{ reviewed?: boolean, engaged?: boolean }} patch
+   */
+  _setStatusOverride(shareId, patch) {
+    const prev = this._statusOverrides.get(shareId) || {};
+    this._statusOverrides.set(shareId, { ...prev, ...patch });
+  }
+
+  /**
+   * Persist one status flag, flipping the card only after the POST confirms.
+   * Per-card and concurrent — no full reload.
+   * @param {QueueCardRecord} record
+   * @param {{ field: 'reviewed' | 'engaged', current: boolean,
+   *   inflight: Set<string>, setInflight: (s: Set<string>) => void,
+   *   post: (endpoint: string, shareId: string, next: boolean) => Promise<unknown>,
+   *   errorMsg: string }} cfg
+   */
+  async _toggleStatus(record, cfg) {
+    const { shareId } = record;
+    if (!shareId) {
+      this._error = `Cannot mark ${cfg.field}: no share key on this row.`;
+      this.requestUpdate();
+      return;
+    }
+    if (cfg.inflight.has(shareId)) return;
+    const endpoint = this.statusEndpoint;
+    if (!endpoint) {
+      this._error = 'Status endpoint not configured.';
+      this.requestUpdate();
+      return;
+    }
+    const next = !cfg.current;
+    cfg.setInflight(new Set(cfg.inflight).add(shareId));
+    this._error = null;
+    this.requestUpdate();
+    try {
+      await cfg.post(endpoint, shareId, next);
+      this._setStatusOverride(shareId, { [cfg.field]: next });
+    } catch (err) {
+      this._error = err instanceof Error ? err.message : cfg.errorMsg;
+    } finally {
+      const done = new Set(cfg.field === 'reviewed' ? this._reviewingIds : this._engagingIds);
+      done.delete(shareId);
+      cfg.setInflight(done);
+      this.requestUpdate();
+    }
+  }
+
+  /**
+   * @param {QueueCardRecord} record
+   */
+  _onToggleReviewed(record) {
+    return this._toggleStatus(record, {
+      field: 'reviewed',
+      current: isReviewed(record),
+      inflight: this._reviewingIds,
+      setInflight: (s) => { this._reviewingIds = s; },
+      post: postShareReview,
+      errorMsg: 'Could not update reviewed state',
+    });
+  }
+
+  /**
+   * @param {QueueCardRecord} record
+   */
+  _onToggleEngaged(record) {
+    return this._toggleStatus(record, {
+      field: 'engaged',
+      current: isEngaged(record),
+      inflight: this._engagingIds,
+      setInflight: (s) => { this._engagingIds = s; },
+      post: postShareEngage,
+      errorMsg: 'Could not update engaged state',
+    });
+  }
+
+  /**
+   * Shared renderer for the reviewed / engaged status toggles.
+   * @param {QueueCardRecord} record
+   * @param {{ on: boolean, busy: boolean, modifier: string, icon: string,
+   *   onLabel: string, offLabel: string, busyLabel: string, missingLabel: string,
+   *   onText: string, offText: string, click: () => void }} cfg
+   */
+  _renderStatusToggle(record, cfg) {
+    const { shareId } = record;
+    const disabled = !shareId || this._deleteBusy || this._cardBusy(shareId);
+    let label = cfg.on ? cfg.onLabel : cfg.offLabel;
+    if (cfg.busy) label = cfg.busyLabel;
+    if (!shareId) label = cfg.missingLabel;
+
+    return html`
+      <button
+        type="button"
+        class="ema-queue__toggle ema-queue__toggle--${cfg.modifier} ${cfg.on ? 'is-on' : ''}"
+        aria-label=${label}
+        aria-pressed=${cfg.on}
+        title=${label}
+        ?disabled=${disabled}
+        @click=${cfg.click}
+      >
+        <svg width="16" height="16" viewBox="0 0 18 18" aria-hidden="true" focusable="false">
+          <path fill="currentColor" d=${cfg.icon} />
+        </svg>
+        <span>${cfg.on ? cfg.onText : cfg.offText}</span>
+      </button>
+    `;
+  }
+
+  _renderReviewedButton(record) {
+    const reviewed = isReviewed(record);
+    return this._renderStatusToggle(record, {
+      on: reviewed,
+      busy: this._reviewingIds.has(record.shareId),
+      modifier: 'reviewed',
+      icon: 'M6.7 13.3 2.9 9.5l1.2-1.2 2.6 2.6 7-7L15 4.1l-8.3 9.2Z',
+      onLabel: 'Reviewed — click to unmark',
+      offLabel: 'Mark as reviewed',
+      busyLabel: 'Updating reviewed state',
+      missingLabel: 'Review unavailable (no share key)',
+      onText: 'Reviewed',
+      offText: 'Mark reviewed',
+      click: () => this._onToggleReviewed(record),
+    });
+  }
+
+  _renderEngagedButton(record) {
+    const engaged = isEngaged(record);
+    return this._renderStatusToggle(record, {
+      on: engaged,
+      busy: this._engagingIds.has(record.shareId),
+      modifier: 'engaged',
+      icon: 'M9 1.5a7.5 7.5 0 1 0 0 15 7.5 7.5 0 0 0 0-15Zm3.3 5.6-3.9 3.9a.6.6 0 0 1-.85 0L5.7 9.05l.85-.85 1.6 1.6 3.5-3.5.85.8Z',
+      onLabel: 'Engaged — click to unmark',
+      offLabel: 'Mark as engaged',
+      busyLabel: 'Updating engaged state',
+      missingLabel: 'Engage unavailable (no share key)',
+      onText: 'Engaged',
+      offText: 'Mark engaged',
+      click: () => this._onToggleEngaged(record),
+    });
+  }
+
   _renderDeleteButton(record) {
     const { shareId } = record;
     const busy = this._deletingShareId === shareId;
-    const disabled = this._loading || Boolean(this._deletingShareId)
-      || Boolean(this._pendingDelete);
+    const disabled = this._deleteBusy || this._cardBusy(shareId);
     const missingKey = !shareId;
     let label = 'Delete submission';
     if (busy) label = 'Deleting submission';
@@ -546,7 +1013,7 @@ class EmaQueue extends LitElement {
   }
 
   _onExportCsvClick() {
-    const cards = this._cards;
+    const cards = this._visibleCards;
     if (!cards.length) return;
     const csv = recordsToCsv(cards);
     const date = new Date().toISOString().slice(0, 10);
@@ -554,7 +1021,7 @@ class EmaQueue extends LitElement {
   }
 
   get _canExport() {
-    return !this._loading && this._cards.length > 0;
+    return !this._loading && this._visibleCards.length > 0;
   }
 
   _renderLoadingModal() {
@@ -608,6 +1075,114 @@ class EmaQueue extends LitElement {
     `;
   }
 
+  _renderDetailsModal() {
+    const record = this._detailsRecord;
+    if (!record) return nothing;
+
+    const title = pickField(record, TITLE_KEYS) || 'Submission';
+    const subtitle = pickField(record, SUBTITLE_KEYS);
+    const fields = getPopulatedFields(record);
+
+    return html`
+      <div
+        class="ema-queue__modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="ema-queue-details-title"
+        @click=${(e) => { if (e.target === e.currentTarget) this._closeDetails(); }}
+        @keydown=${(e) => { if (e.key === 'Escape') this._closeDetails(); }}
+      >
+        <div class="ema-queue__modal-dialog ema-queue__modal-dialog--details">
+          <header class="ema-queue__details-header">
+            <div class="ema-queue__details-heading">
+              <h2 id="ema-queue-details-title" class="ema-queue__details-title">${title}</h2>
+              ${subtitle
+                ? html`<p class="ema-queue__details-subtitle">${subtitle}</p>`
+                : nothing}
+            </div>
+            <button
+              type="button"
+              class="ema-queue__details-close"
+              aria-label="Close details"
+              @click=${this._closeDetails}
+              autofocus
+            >
+              <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true" focusable="false">
+                <path
+                  fill="currentColor"
+                  d="M14.5 4.6 13.4 3.5 9 7.9 4.6 3.5 3.5 4.6 7.9 9l-4.4 4.4 1.1 1.1L9 10.1l4.4 4.4 1.1-1.1L10.1 9z"
+                />
+              </svg>
+            </button>
+          </header>
+          <dl class="ema-queue__details-list">
+            ${fields.map((field) => html`
+              <div class="ema-queue__detail-row">
+                <dt class="ema-queue__detail-label">${field.label}</dt>
+                <dd class="ema-queue__detail-value ema-queue__detail-value--modal">${field.value}</dd>
+              </div>
+            `)}
+          </dl>
+        </div>
+      </div>
+    `;
+  }
+
+  _renderFilters() {
+    if (this._loading || this._error || this._data == null) return nothing;
+    if (!this._cards.length) return nothing;
+
+    const counts = this._filterCounts;
+    const hasActive = this._activeFilters.length > 0;
+
+    return html`
+      <div class="ema-queue__filters" role="group" aria-label="Filter submissions">
+        <span class="ema-queue__filters-label">Filter</span>
+        ${FILTER_DEFS.map((f) => {
+          const active = this._activeFilters.includes(f.key);
+          return html`
+            <button
+              type="button"
+              class="ema-queue__filter ema-queue__filter--${f.key} ${active ? 'is-selected' : ''}"
+              aria-pressed=${active}
+              @click=${() => this._toggleFilter(f.key)}
+            >
+              ${f.label}
+              <span class="ema-queue__filter-count">${counts[f.key] ?? 0}</span>
+            </button>
+          `;
+        })}
+        ${hasActive
+          ? html`
+            <button type="button" class="ema-queue__filter-clear" @click=${this._clearFilters}>
+              Clear
+            </button>
+          `
+          : nothing}
+      </div>
+    `;
+  }
+
+  _renderSort() {
+    if (this._loading || this._error || this._data == null) return nothing;
+    if (!this._cards.length) return nothing;
+
+    return html`
+      <div class="ema-queue__sort">
+        <label class="ema-queue__sort-label" for="ema-queue-sort">Sort</label>
+        <select
+          id="ema-queue-sort"
+          class="ema-queue__sort-select"
+          @change=${this._onSortChange}
+        >
+          ${SORT_DEFS.map((s) => html`
+            <option value=${s.key} ?selected=${this._sort === s.key}>${s.label}</option>
+          `)}
+        </select>
+      </div>
+    `;
+  }
+
   _renderStatus() {
     if (this._error) {
       return html`
@@ -646,20 +1221,16 @@ class EmaQueue extends LitElement {
     const title = pickField(record, TITLE_KEYS) || '(No account)';
     const subtitle = pickField(record, SUBTITLE_KEYS);
     const chips = getChipFields(record);
-    const chipKeys = new Set(chips.map((c) => c.key));
-    const titleKeys = new Set([...TITLE_KEYS, ...SUBTITLE_KEYS]);
-    const populated = getPopulatedFields(record);
+    const fieldCount = getPopulatedFields(record).length;
     const incomplete = isIncompleteSubmission(record);
-    const detailFields = populated.filter(
-      (f) => !titleKeys.has(f.key) && !chipKeys.has(f.key)
-        && !(incomplete && f.key === 'submitted'),
-    );
-    const expanded = this._isExpanded(cardId);
-    const moreCount = detailFields.length;
+    const complete = isCompleteSubmission(record);
+    const reviewed = isReviewed(record);
+    const engaged = isEngaged(record);
+    const subDate = submittedDate(record);
 
     return html`
       <article
-        class="ema-queue__card ${expanded ? 'ema-queue__card--expanded' : ''} ${incomplete ? 'ema-queue__card--incomplete' : ''}"
+        class="ema-queue__card ${incomplete ? 'ema-queue__card--incomplete' : ''}"
         aria-labelledby="ema-queue-card-${cardId}"
       >
         <header class="ema-queue__card-header">
@@ -669,10 +1240,25 @@ class EmaQueue extends LitElement {
               ${incomplete
                 ? html`<span class="ema-queue__badge ema-queue__badge--incomplete">Incomplete</span>`
                 : nothing}
+              ${complete
+                ? html`<span class="ema-queue__badge ema-queue__badge--complete">Ready</span>`
+                : nothing}
+              ${reviewed
+                ? html`<span class="ema-queue__badge ema-queue__badge--reviewed">Reviewed</span>`
+                : nothing}
+              ${engaged
+                ? html`<span class="ema-queue__badge ema-queue__badge--engaged">Engaged</span>`
+                : nothing}
             </div>
             <h2 class="ema-queue__card-title" id="ema-queue-card-${cardId}">${title}</h2>
             ${subtitle
               ? html`<p class="ema-queue__card-subtitle">${subtitle}</p>`
+              : nothing}
+            ${subDate
+              ? html`
+                <p class="ema-queue__card-date">
+                  <span class="ema-queue__card-date-label">Submitted</span> ${subDate}
+                </p>`
               : nothing}
           </div>
           ${this._renderDeleteButton(record)}
@@ -691,32 +1277,22 @@ class EmaQueue extends LitElement {
           `
           : nothing}
 
-        ${moreCount > 0
+        ${fieldCount > 0
           ? html`
             <button
               type="button"
-              class="ema-queue__expand"
-              aria-expanded=${expanded}
-              aria-controls="ema-queue-detail-${cardId}"
-              @click=${() => this._toggleExpand(cardId)}
+              class="ema-queue__view-details"
+              @click=${() => this._openDetails(record)}
             >
-              ${expanded ? 'Hide' : 'Show'} ${moreCount} more field${moreCount === 1 ? '' : 's'}
+              View all ${fieldCount} field${fieldCount === 1 ? '' : 's'}
             </button>
           `
           : nothing}
 
-        ${expanded && moreCount > 0
-          ? html`
-            <dl class="ema-queue__detail" id="ema-queue-detail-${cardId}">
-              ${detailFields.map((field) => html`
-                <div class="ema-queue__detail-row">
-                  <dt class="ema-queue__detail-label">${field.label}</dt>
-                  <dd class="ema-queue__detail-value">${field.value}</dd>
-                </div>
-              `)}
-            </dl>
-          `
-          : nothing}
+        <div class="ema-queue__card-actions">
+          ${this._renderReviewedButton(record)}
+          ${this._renderEngagedButton(record)}
+        </div>
       </article>
     `;
   }
@@ -724,9 +1300,22 @@ class EmaQueue extends LitElement {
   _renderResults() {
     if (this._loading || this._error || this._data == null) return nothing;
 
-    const cards = this._cards;
-    if (!cards.length) {
+    const total = this._cards.length;
+    if (!total) {
       return html`<p class="ema-queue__empty">No submissions returned.</p>`;
+    }
+
+    const cards = this._visibleCards;
+    const filtered = this._activeFilters.length > 0;
+    const count = filtered
+      ? html`${cards.length} of ${total} submission${total === 1 ? '' : 's'}`
+      : html`${total} submission${total === 1 ? '' : 's'}`;
+
+    if (!cards.length) {
+      return html`
+        <p class="ema-queue__count">${count}</p>
+        <p class="ema-queue__empty">No submissions match these filters.</p>
+      `;
     }
 
     let formatted;
@@ -737,7 +1326,7 @@ class EmaQueue extends LitElement {
     }
 
     return html`
-      <p class="ema-queue__count">${cards.length} submission${cards.length === 1 ? '' : 's'}</p>
+      <p class="ema-queue__count">${count}</p>
       <div class="ema-queue__cards" role="list">
         ${cards.map((record, index) => html`
           <div class="ema-queue__cards-item" role="listitem">
@@ -775,8 +1364,11 @@ class EmaQueue extends LitElement {
             Export CSV
           </sp-button>
         </div>
+        ${this._renderFilters()}
+        ${this._renderSort()}
         ${this._renderStatus()}
         ${this._renderResults()}
+        ${this._renderDetailsModal()}
         ${this._renderConfirmModal()}
         ${this._renderLoadingModal()}
       </div>
@@ -787,15 +1379,15 @@ class EmaQueue extends LitElement {
 customElements.define(EL_NAME, EmaQueue);
 
 export default async function init(el) {
-  let token = null;
+  let daFetch = null;
   let context = null;
   let adminOrigin = 'https://admin.da.live';
   try {
     const sdk = await DA_SDK;
-    token = sdk.token ?? null;
+    daFetch = sdk.actions?.daFetch ?? null;
     context = sdk.context ?? null;
   } catch {
-    /* DA parent not available */
+    /* DA parent not available (standalone) */
   }
   try {
     const mod = await import('https://da.live/nx/public/utils/constants.js');
@@ -804,22 +1396,30 @@ export default async function init(el) {
     /* default adminOrigin */
   }
 
+  // org/repo: DA SDK context first, then the embedded-browser URL (the editor
+  // hash carries org/repo even when the SDK context does not).
+  const base = context ? { ...context } : {};
+  const urlOrgRepo = parseDaOrgRepoFromEmbeddedBrowsers();
+  if (urlOrgRepo) {
+    base.org = urlOrgRepo.org;
+    base.repo = urlOrgRepo.repo;
+  }
+  const org = base.org?.trim();
+  const repo = base.repo?.trim();
+
   const cmp = document.createElement(EL_NAME);
   cmp.details = typeof getBlockDetails === 'function' ? getBlockDetails(el) : {};
-  cmp.context = context && Object.keys(context).length ? { ...context } : null;
+  cmp.context = Object.keys(base).length ? base : null;
   cmp.adminOrigin = adminOrigin;
 
-  const org = context?.org?.trim();
-  const repo = context?.repo?.trim();
-
-  if (!token) {
+  if (!daFetch) {
     cmp.primeError('Sign in to Document Authoring to load the queue.');
   } else if (!org || !repo) {
     cmp.primeError('Open the queue from Document Authoring (org and repo context required).');
   } else {
     try {
       const endpoint = await loadFusionEndpointFromConfig({
-        token,
+        daFetch,
         adminOrigin,
         org,
         repo,
@@ -837,4 +1437,27 @@ export default async function init(el) {
 
   el.replaceChildren();
   el.append(cmp);
+}
+
+/** Mount the queue into #queue-root. */
+async function boot() {
+  const root = document.getElementById('queue-root');
+  if (!root) return;
+  try {
+    await init(root);
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error(err);
+    root.replaceChildren();
+    const p = document.createElement('p');
+    p.textContent = `Could not start the queue: ${err?.message ?? err}`;
+    p.style.cssText = 'padding:1rem;font-family:system-ui,sans-serif';
+    root.append(p);
+  }
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', boot);
+} else {
+  boot();
 }
