@@ -315,6 +315,39 @@ ema-queue *::after {
   outline-offset: 2px;
 }
 
+.ema-queue__form-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 5px 12px;
+  border: 1px solid var(--spectrum-gray-300);
+  border-radius: 999px;
+  background: var(--spectrum-gray-50);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--spectrum-blue-800);
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+.ema-queue__form-link svg {
+  display: block;
+}
+
+.ema-queue__form-link:hover {
+  background: var(--spectrum-blue-100);
+  border-color: var(--spectrum-blue-800);
+  color: var(--spectrum-blue-900);
+}
+
+.ema-queue__form-link:focus-visible {
+  outline: 2px solid var(--spectrum-blue-800);
+  outline-offset: 2px;
+}
+
 .ema-queue__detail-row {
   display: grid;
   grid-template-columns: minmax(120px, 38%) 1fr;
