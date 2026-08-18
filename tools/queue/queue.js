@@ -19,6 +19,7 @@ import DA_SDK from 'https://da.live/nx/utils/sdk.js';
 import { LitElement, html, nothing } from '../../deps/lit/dist/index.js';
 import { loadFusionEndpointFromConfig, parseDaOrgRepoFromEmbeddedBrowsers } from '../shared/da-config.js';
 import { initSpectrum } from '../shared/spectrum-theme.js';
+import { buildFormShareUrl } from './form-share-url.js';
 
 /* global getBlockDetails */
 
@@ -942,6 +943,31 @@ class EmaQueue extends LitElement {
     `;
   }
 
+  /**
+   * Link that opens the intake form for this submission (restores its share).
+   * Rendered only when the submission has a usable share id.
+   * @param {QueueCardRecord} record
+   */
+  _renderFormLink(record) {
+    const url = buildFormShareUrl(this.context, record.shareId);
+    if (!url) return nothing;
+    return html`
+      <a
+        class="ema-queue__form-link"
+        href=${url}
+        target="_blank"
+        rel="noopener noreferrer"
+        title="Open the intake form for this submission (opens in a new tab)"
+      >
+        <svg width="16" height="16" viewBox="0 0 18 18" aria-hidden="true" focusable="false">
+          <path fill="currentColor" d="M10.5 3H15v4.5h-1.5V5.56l-5.47 5.47-1.06-1.06L11.94 4.5H10.5V3Z" />
+          <path fill="currentColor" d="M4 5.5A1.5 1.5 0 0 1 5.5 4H9v1.5H5.5v7h7V9H14v3.5A1.5 1.5 0 0 1 12.5 14h-7A1.5 1.5 0 0 1 4 12.5v-7Z" />
+        </svg>
+        <span>Open form</span>
+      </a>
+    `;
+  }
+
   _renderReviewedButton(record) {
     const reviewed = isReviewed(record);
     return this._renderStatusToggle(record, {
@@ -1290,6 +1316,7 @@ class EmaQueue extends LitElement {
           : nothing}
 
         <div class="ema-queue__card-actions">
+          ${this._renderFormLink(record)}
           ${this._renderReviewedButton(record)}
           ${this._renderEngagedButton(record)}
         </div>
